@@ -1,120 +1,104 @@
-import React, { useState } from 'react';
-import { Play, Plus, Trash2, CheckCircle2, XCircle, AlertCircle, Wand2 } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Play, Plus, Trash2, CheckCircle2, XCircle, AlertCircle, Wand2, RefreshCw } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export default function TestcaseLab() {
-  const { state, traceEngine } = useApp();
-  const [testcases, setTestcases] = useState([
-    { id: 1, input: state.testInput, expected: '', status: 'not-run', output: null }
-  ]);
+  const { state, update, traceEngine } = useApp();
+  const [customCases, setCustomCases] = useState([]);
   const [runningId, setRunningId] = useState(null);
-  const [isBatchRunning, setIsBatchRunning] = useState(false);
-  const [batchProgress, setBatchProgress] = useState(0);
 
-  const addTestcase = (input = '', expected = '') => {
-    setTestcases(prev => [
-      ...prev,
-      { id: Date.now(), input, expected, status: 'not-run', output: null }
-    ]);
+  // Build the list of test cases from LeetCode or custom inputs
+  const sampleCases = useMemo(() => {
+    if (state.editorMode === 'leetcode' && state.leetcodeProblem?.testcases) {
+      return state.leetcodeProblem.testcases.map((tc, i) => ({
+        id: `lc-${i}`,
+        source: 'leetcode',
+        data: typeof tc === 'object' ? tc : { input: tc },
+        label: `Sample ${i + 1}`,
+      }));
+    }
+    // For custom mode, show current customInputs as a single test case
+    if (state.customInputs && state.customInputs.length > 0) {
+      const obj = {};
+      state.customInputs.forEach(inp => {
+        if (inp.key) {
+          try { obj[inp.key] = JSON.parse(inp.val); }
+          catch { obj[inp.key] = inp.val; }
+        }
+      });
+      if (Object.keys(obj).length > 0) {
+        return [{ id: 'custom-current', source: 'custom', data: obj, label: 'Current Input' }];
+      }
+    }
+    return [];
+  }, [state.editorMode, state.leetcodeProblem, state.customInputs]);
+
+  const allCases = [...sampleCases, ...customCases];
+
+  const addCustomCase = () => {
+    setCustomCases(prev => [...prev, {
+      id: `user-${Date.now()}`,
+      source: 'user',
+      data: {},
+      label: `Custom ${prev.length + 1}`,
+      editable: true,
+      inputStr: '',
+    }]);
   };
 
-  const removeTestcase = (id) => {
-    setTestcases(prev => prev.filter(tc => tc.id !== id));
+  const removeCustomCase = (id) => {
+    setCustomCases(prev => prev.filter(c => c.id !== id));
   };
 
-  const updateTestcase = (id, updates) => {
-    setTestcases(prev => prev.map(tc => tc.id === id ? { ...tc, ...updates } : tc));
+  const updateCustomCaseInput = (id, val) => {
+    setCustomCases(prev => prev.map(c => {
+      if (c.id !== id) return c;
+      let data = {};
+      try { data = JSON.parse(val); } catch { /* leave empty */ }
+      return { ...c, inputStr: val, data };
+    }));
   };
 
-  const runTestcase = async (id) => {
-    const tc = testcases.find(t => t.id === id);
-    if (!tc || !traceEngine.isReady) return;
-
-    setRunningId(id);
-    updateTestcase(id, { status: 'running' });
+  const handleReRun = async (testCase) => {
+    setRunningId(testCase.id);
+    update({ globalLoading: true, globalLoadingText: 'Re-running with selected test case…' });
 
     try {
-      const result = await traceEngine.executeCode(state.code, tc.input);
-      if (result.error && result.frames?.length === 0) {
-        updateTestcase(id, { status: 'error', output: result.error });
+      const testInput = JSON.stringify([testCase.data]);
+      const code = state.code || '';
+      const result = await traceEngine.executeCode(state.language, code, testInput, state.customApiKey, state.judge0ApiKey);
+
+      if (result.error && (!result.frames || result.frames.length === 0)) {
+        alert('Error: ' + result.error);
+        update({ globalLoading: false });
+        setRunningId(null);
         return;
       }
 
-      const finalFrame = result.frames[result.frames.length - 1];
-      let actualOutput = null;
-      if (finalFrame?.eventType === 'return') {
-        actualOutput = String(finalFrame.variables?.[finalFrame.returnValue]?.value ?? finalFrame.returnValue ?? 'None');
-      }
-
-      let status = 'pass';
-      if (tc.expected && tc.expected.trim() !== '') {
-        status = actualOutput === tc.expected.trim() ? 'pass' : 'fail';
-      } else {
-        status = 'not-run'; // If no expected output, just leave it neutral but show output
-      }
-
-      updateTestcase(id, { status, output: actualOutput });
-
+      update({
+        globalLoading: false,
+        executionTrace: result.frames || [],
+        currentFrame: 0,
+        detectedBugs: result.bugs || [],
+        lastExecutedCode: code,
+        customInputs: Object.entries(testCase.data).map(([k, v]) => ({
+          key: k,
+          val: typeof v === 'object' ? JSON.stringify(v) : String(v),
+        })),
+      });
     } catch (err) {
-      updateTestcase(id, { status: 'error', output: err.message });
+      alert('Execution failed: ' + err.message);
+      update({ globalLoading: false });
     } finally {
       setRunningId(null);
     }
   };
 
-  const runAll = async () => {
-    if (!traceEngine.isReady || isBatchRunning) return;
-    setIsBatchRunning(true);
-    setBatchProgress(0);
-
-    for (let i = 0; i < testcases.length; i++) {
-      setBatchProgress(i);
-      await runTestcase(testcases[i].id);
-    }
-    
-    setBatchProgress(testcases.length);
-    setIsBatchRunning(false);
-  };
-
-  // ── GENERATORS ──
-  const handleGenerate = (type) => {
-    const code = state.code.toLowerCase();
-    const isBinarySearch = code.includes('mid') && code.includes('left') && code.includes('right');
-    const isTree = code.includes('node') && code.includes('left') && code.includes('right');
-    
-    if (type === 'edge') {
-      addTestcase('[]');
-      addTestcase('[1]');
-    } else if (type === 'worst') {
-      if (isBinarySearch) addTestcase('[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]');
-      else addTestcase('[10, 9, 8, 7, 6, 5, 4, 3, 2, 1]');
-    } else if (type === 'stress') {
-      for (let i = 0; i < 5; i++) {
-        const arr = Array.from({length: 15}, () => Math.floor(Math.random() * 100));
-        addTestcase(JSON.stringify(arr));
-      }
-    } else {
-      // random
-      const arr = Array.from({length: 8}, () => Math.floor(Math.random() * 50));
-      addTestcase(JSON.stringify(isBinarySearch ? arr.sort((a,b)=>a-b) : arr));
-    }
-  };
-
-  const renderStatus = (status) => {
-    switch(status) {
-      case 'pass': return <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#10B981', fontSize: 11, fontWeight: 600 }}><CheckCircle2 size={14} /> Pass</div>;
-      case 'fail': return <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#EF4444', fontSize: 11, fontWeight: 600 }}><XCircle size={14} /> Fail</div>;
-      case 'error': return <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#F59E0B', fontSize: 11, fontWeight: 600 }}><AlertCircle size={14} /> Error</div>;
-      case 'running': return <div style={{ fontSize: 11, color: 'var(--accent-sage)', fontWeight: 600 }}>Running...</div>;
-      default: return <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Not run</div>;
-    }
-  };
-
   return (
-    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Test Cases</h2>
-        <button onClick={() => addTestcase()} style={{
+        <button onClick={addCustomCase} style={{
           padding: '4px 10px', background: 'transparent', border: '1px solid var(--accent-sage)',
           color: 'var(--accent-sage)', borderRadius: 6, fontSize: 11, cursor: 'pointer',
           display: 'flex', alignItems: 'center', gap: 4
@@ -123,83 +107,151 @@ export default function TestcaseLab() {
         </button>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {testcases.map((tc, i) => (
+      {/* Source badge */}
+      {state.editorMode === 'leetcode' && state.leetcodeProblem && (
+        <div style={{
+          padding: '6px 10px', background: 'rgba(143,175,157,0.08)',
+          border: '1px solid rgba(143,175,157,0.2)', borderRadius: 6,
+          fontSize: 11, color: 'var(--accent-sage)', fontWeight: 500,
+        }}>
+          Showing {sampleCases.length} sample case{sampleCases.length !== 1 ? 's' : ''} from LeetCode
+        </div>
+      )}
+
+      {/* Test case cards */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {allCases.map((tc) => (
           <div key={tc.id} style={{
-            background: 'var(--bg-canvas)', border: tc.status === 'fail' ? '1px solid #EF4444' : tc.status === 'pass' ? '1px solid #10B981' : '1px solid var(--border)',
-            borderRadius: 8, padding: 12, display: 'flex', flexDirection: 'column', gap: 8
+            background: 'var(--bg-canvas)',
+            border: '1px solid var(--border)',
+            borderRadius: 10, padding: 14,
+            display: 'flex', flexDirection: 'column', gap: 8,
+            transition: 'border-color 200ms ease',
           }}>
+            {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>Case {i + 1}</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {renderStatus(tc.status)}
-                <button onClick={() => runTestcase(tc.id)} disabled={runningId === tc.id || isBatchRunning} style={{
-                  background: 'transparent', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', padding: 2
-                }}><Play size={14} /></button>
-                <button onClick={() => removeTestcase(tc.id)} style={{
-                  background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 2
-                }}><Trash2 size={14} /></button>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{tc.label}</span>
+                <span style={{
+                  padding: '1px 6px', borderRadius: 12, fontSize: 9, fontWeight: 600,
+                  background: tc.source === 'leetcode' ? 'rgba(255,160,0,0.12)' : tc.source === 'custom' ? 'rgba(143,175,157,0.12)' : 'rgba(126,184,212,0.12)',
+                  color: tc.source === 'leetcode' ? '#E07D00' : tc.source === 'custom' ? 'var(--accent-sage)' : '#1E6480',
+                  textTransform: 'uppercase',
+                }}>
+                  {tc.source}
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button
+                  onClick={() => handleReRun(tc)}
+                  disabled={runningId === tc.id}
+                  title="Re-run with this test case"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 4,
+                    padding: '4px 10px', background: 'var(--accent-sage)', color: '#fff',
+                    border: 'none', borderRadius: 6, fontSize: 10, fontWeight: 600,
+                    cursor: runningId === tc.id ? 'not-allowed' : 'pointer',
+                    opacity: runningId === tc.id ? 0.6 : 1,
+                  }}
+                >
+                  {runningId === tc.id ? (
+                    <span style={{
+                      width: 10, height: 10, borderRadius: '50%',
+                      border: '2px solid rgba(255,255,255,0.3)',
+                      borderTopColor: '#fff',
+                      animation: 'spin 600ms linear infinite',
+                      display: 'inline-block',
+                    }} />
+                  ) : (
+                    <RefreshCw size={10} />
+                  )}
+                  Re-run
+                </button>
+                {tc.source === 'user' && (
+                  <button onClick={() => removeCustomCase(tc.id)} style={{
+                    background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 2
+                  }}><Trash2 size={14} /></button>
+                )}
               </div>
             </div>
 
-            <textarea
-              value={tc.input} onChange={e => updateTestcase(tc.id, { input: e.target.value })}
-              placeholder="Test input..." rows={2}
-              style={{
-                width: '100%', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 4,
-                padding: '6px 8px', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)',
-                resize: 'vertical'
-              }}
-            />
-            
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Expected:</span>
-              <input
-                type="text" value={tc.expected} onChange={e => updateTestcase(tc.id, { expected: e.target.value })}
-                placeholder="(Optional)"
+            {/* Key-value pairs */}
+            {tc.source === 'user' && tc.editable ? (
+              <textarea
+                value={tc.inputStr || ''}
+                onChange={(e) => updateCustomCaseInput(tc.id, e.target.value)}
+                placeholder='{"nums": [1,2,3], "target": 5}'
+                rows={2}
                 style={{
-                  flex: 1, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 4,
-                  padding: '4px 8px', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)'
+                  width: '100%', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 6,
+                  padding: '8px', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)',
+                  resize: 'vertical', outline: 'none',
                 }}
               />
-            </div>
-
-            {(tc.status === 'fail' || tc.status === 'error' || tc.output) && (
-              <div style={{ marginTop: 4, padding: 8, background: 'var(--bg-card)', borderRadius: 4, border: '1px dashed var(--border)' }}>
-                <span style={{ fontSize: 10, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Actual Output:</span>
-                <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: tc.status === 'error' ? '#EF4444' : 'var(--text-primary)', wordBreak: 'break-all' }}>
-                  {tc.output || 'No output'}
-                </span>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {Object.entries(tc.data).map(([key, val]) => (
+                  <div key={key} style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 8,
+                    padding: '6px 10px', background: 'var(--bg-card)',
+                    border: '1px solid var(--border)', borderRadius: 6,
+                  }}>
+                    <span style={{
+                      fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 600,
+                      color: 'var(--accent-sage)', whiteSpace: 'nowrap', minWidth: 50,
+                    }}>
+                      {key}
+                    </span>
+                    <span style={{ fontSize: 1, color: 'var(--text-muted)' }}>:</span>
+                    <span style={{
+                      fontSize: 11, fontFamily: 'var(--font-mono)',
+                      color: 'var(--text-primary)', wordBreak: 'break-all',
+                    }}>
+                      {typeof val === 'object' ? JSON.stringify(val) : String(val)}
+                    </span>
+                  </div>
+                ))}
               </div>
             )}
           </div>
         ))}
       </div>
 
+      {allCases.length === 0 && (
+        <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)', fontSize: 12 }}>
+          No test cases available. Add a custom case or fetch a LeetCode problem.
+        </div>
+      )}
+
+      {/* Quick generators */}
       <div style={{ padding: 12, background: 'var(--bg-canvas)', border: '1px solid var(--border)', borderRadius: 8 }}>
         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Wand2 size={14} style={{ color: 'var(--accent-sage)' }} /> Generate Test Cases
+          <Wand2 size={14} style={{ color: 'var(--accent-sage)' }} /> Quick Generate
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {['Random Case', 'Edge Case', 'Worst Case', 'Stress Test'].map(type => (
-            <button key={type} onClick={() => handleGenerate(type.split(' ')[0].toLowerCase())} style={{
+          {['Random', 'Edge', 'Worst'].map(type => (
+            <button key={type} onClick={() => {
+              const arr = type === 'Edge' ? [] : type === 'Worst' ? [10,9,8,7,6,5,4,3,2,1] : Array.from({length: 8}, () => Math.floor(Math.random() * 50));
+              setCustomCases(prev => [...prev, {
+                id: `gen-${Date.now()}`,
+                source: 'user',
+                data: { nums: arr },
+                label: `${type} Case`,
+                editable: false,
+              }]);
+            }} style={{
               padding: '6px 12px', background: 'var(--bg-card)', border: '1px solid var(--border)',
-              borderRadius: 6, fontSize: 11, color: 'var(--text-secondary)', cursor: 'pointer'
-            }}>
-              {type}
+              borderRadius: 6, fontSize: 11, color: 'var(--text-secondary)', cursor: 'pointer',
+              transition: 'background 150ms ease',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--border)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-card)'}
+            >
+              {type} Case
             </button>
           ))}
         </div>
       </div>
-
-      <button onClick={runAll} disabled={isBatchRunning || !traceEngine.isReady} style={{
-        padding: '10px', background: 'var(--accent-sage)', color: '#fff', border: 'none', borderRadius: 8,
-        fontSize: 13, fontWeight: 600, cursor: isBatchRunning ? 'not-allowed' : 'pointer',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: isBatchRunning ? 0.7 : 1
-      }}>
-        {isBatchRunning ? `Running ${batchProgress}/${testcases.length}...` : 'Run All Cases'}
-      </button>
-
     </div>
   );
 }

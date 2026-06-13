@@ -48,47 +48,54 @@ export function detectStructures(frame) {
   const isObject = (val) => val !== null && typeof val === 'object' && !Array.isArray(val);
 
   for (const [name, info] of Object.entries(vars)) {
-    const val = info.value;
+    // Handle both {value, type} shape and raw values
+    const val = info.value !== undefined ? info.value : info;
     const nameLower = name.toLowerCase();
 
-    if (Array.isArray(val)) {
-      const is2D = val.length > 0 && Array.isArray(val[0]);
+    // Try to coerce string numbers
+    let effectiveVal = val;
+    if (typeof val === 'string' && !isNaN(val) && val.trim() !== '') {
+      effectiveVal = Number(val);
+    }
+
+    if (Array.isArray(effectiveVal)) {
+      const is2D = effectiveVal.length > 0 && Array.isArray(effectiveVal[0]);
       
       // Graph detection: 2D array named adj/graph/g
       if (is2D && /^(adj|graph|g)$/.test(nameLower)) {
-        graphs.push({ name, info, is2D, type: 'matrix' });
+        graphs.push({ name, info: { ...info, value: effectiveVal }, is2D, type: 'matrix' });
       }
       // Stack detection
-      else if (/^(stack|st)$/.test(nameLower) || (val.__class__ && val.__class__.toLowerCase().includes('stack'))) {
-        stacks.push({ name, info });
+      else if (/^(stack|st)$/.test(nameLower) || (effectiveVal.__class__ && effectiveVal.__class__.toLowerCase().includes('stack'))) {
+        stacks.push({ name, info: { ...info, value: effectiveVal } });
       }
       // Queue detection
-      else if (/^(queue|q|dq|deque)$/.test(nameLower) || (val.__class__ && val.__class__.toLowerCase().includes('queue')) || (val.__class__ && val.__class__.toLowerCase().includes('deque'))) {
-        queues.push({ name, info });
+      else if (/^(queue|q|dq|deque)$/.test(nameLower) || (effectiveVal.__class__ && effectiveVal.__class__.toLowerCase().includes('queue')) || (effectiveVal.__class__ && effectiveVal.__class__.toLowerCase().includes('deque'))) {
+        queues.push({ name, info: { ...info, value: effectiveVal } });
       }
       // Standard array
       else {
-        arrays.push({ name, info, is2D });
+        arrays.push({ name, info: { ...info, value: effectiveVal }, is2D });
       }
-    } else if (isObject(val)) {
+    } else if (isObject(effectiveVal)) {
       // Check for Linked List (has 'next')
-      if ('next' in val || (val.__class__ && val.__class__.toLowerCase().includes('listnode'))) {
-        linkedLists.push({ name, info });
+      if ('next' in effectiveVal || (effectiveVal.__class__ && effectiveVal.__class__.toLowerCase().includes('listnode'))) {
+        linkedLists.push({ name, info: { ...info, value: effectiveVal } });
       } 
       // Check for Tree (has 'left' and 'right' or 'children')
-      else if (('left' in val && 'right' in val) || 'children' in val || (val.__class__ && val.__class__.toLowerCase().includes('treenode'))) {
-        trees.push({ name, info });
+      else if (('left' in effectiveVal && 'right' in effectiveVal) || 'children' in effectiveVal || (effectiveVal.__class__ && effectiveVal.__class__.toLowerCase().includes('treenode'))) {
+        trees.push({ name, info: { ...info, value: effectiveVal } });
       }
       // Check for Adjacency List Graph (dict/hashmap where values are arrays)
-      else if ((info.type === 'dict' || !val.__class__) && Object.values(val).length > 0 && Array.isArray(Object.values(val)[0])) {
-        graphs.push({ name, info, is2D: false, type: 'adj_list' });
+      else if (((info.type || '') === 'dict' || !effectiveVal.__class__) && Object.values(effectiveVal).length > 0 && Array.isArray(Object.values(effectiveVal)[0])) {
+        graphs.push({ name, info: { ...info, value: effectiveVal }, is2D: false, type: 'adj_list' });
       }
       // Otherwise, standard hashmap / object
-      else if (info.type === 'dict' || !val.__class__) {
-        hashmaps.push({ name, info });
+      else if ((info.type || '') === 'dict' || !effectiveVal.__class__) {
+        hashmaps.push({ name, info: { ...info, value: effectiveVal } });
       }
-    } else if (info.type === 'int' || typeof val === 'number') {
-      integers[name] = val;
+    } else if ((info.type || '') === 'int' || typeof effectiveVal === 'number') {
+      integers[name] = typeof effectiveVal === 'number' ? effectiveVal : Number(effectiveVal);
     }
   }
 

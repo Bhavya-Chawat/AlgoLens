@@ -120,10 +120,10 @@ export default function MemoryTab() {
                 <div key={name} style={{
                   padding: '4px 8px', background: 'var(--bg-canvas)', border: '1px solid var(--border)', borderRadius: 4,
                   fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)',
-                  display: 'flex', justifyContent: 'space-between'
+                  display: 'flex', justifyContent: 'space-between', gap: 8, minWidth: 0
                 }}>
-                  <span>{name}</span>
-                  <span>{String(info.value).slice(0, 10)}</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>{name}</span>
+                  <span style={{ flexShrink: 0 }}>{String(info.value).slice(0, 10)}</span>
                 </div>
               ))}
               

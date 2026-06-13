@@ -32,7 +32,7 @@ const LOCAL_CMDS = {
 /**
  * Instruments the user's code via Groq LLM
  */
-async function instrumentCode(language, code, testInput, apiKey) {
+async function instrumentCode(editorMode, language, code, testInput, apiKey) {
   if (!code || code.trim() === '') {
     throw new Error('Code is empty. Please write some code before executing.');
   }
@@ -43,14 +43,21 @@ async function instrumentCode(language, code, testInput, apiKey) {
   }
   const groq = new Groq({ apiKey: effectiveKey });
 
-  const systemPrompt = `You are an expert compiler engineer and AST transformer.
+  let systemPrompt = `You are an expert compiler engineer and AST transformer.
 Your task is to take the provided ${language} code and rewrite it to output a line-by-line execution trace.
 Rules:
 1. Inject a print statement immediately after EVERY logical line or variable assignment in the user's code.
 2. The print statement MUST output EXACTLY one single line of valid JSON in this format:
    {"line": <current_line_number>, "vars": {"var1": <val>, "var2": <val>}}
-3. Do not break the syntax of the program. Ensure all blocks { } remain balanced.
-4. You MUST append a main function/execution block that parses this input: ${JSON.stringify(testInput)} and calls the user's function.
+3. Do not break the syntax of the program. Ensure all blocks { } remain balanced.`;
+
+  if (editorMode === 'custom') {
+    systemPrompt += `\n4. The user has provided custom code that may already contain a main function. DO NOT generate or append a new main function. ONLY instrument the code they provided.`;
+  } else {
+    systemPrompt += `\n4. You MUST append a main function/execution block that parses this input: ${JSON.stringify(testInput)}, calls the user's function, and prints the final returned result as EXACTLY one line of JSON: {"result": <returned_value>}`;
+  }
+
+  systemPrompt += `
 5. ONLY OUTPUT THE INSTRUMENTED CODE. Do not include markdown formatting like \`\`\`java. Just the raw code.
 6. The output must be ready to compile and run directly. For Java, you MUST NOT include any package declaration, and the main class MUST be named 'Main' and must be 'public'. Keep all other classes non-public.
 7. CRITICAL JSON RULES: 
@@ -59,6 +66,7 @@ Rules:
    - For JavaScript: Use the built-in 'JSON.stringify()'
    - For Java: You MUST import 'com.google.gson.Gson' and 'java.util.Map'. Do NOT use double-brace initialization (e.g. \`new HashMap<>() {{ put(...); }}\`) because loop variables are not effectively final! Instead, use Java 9+ \`Map.of("line", lineNum, "vars", Map.of("varName", varValue))\` and wrap it in \`new Gson().toJson(...)\` inside your print statement.
    - For C++: You MUST include <json.hpp> (which is nlohmann/json) AND <iostream>. Use nlohmann::json to build and serialize the JSON!
+8. CRITICAL RULE: DO NOT fix any missing semicolons, typos, or syntax errors present in the user's logic. If they missed a semicolon, YOU MUST leave it missing in your output so the actual compiler catches it. However, you MUST STILL provide necessary imports (and a main wrapper if instructed above).
 
 User Code:
 ${code}`;
@@ -184,11 +192,19 @@ async function executeLocally(language, code) {
 /**
  * Orchestrates the full tracing flow
  */
-async function getTrace(language, code, testInput, apiKey, judge0ApiKey) {
+async function getTrace(editorMode, language, code, testInput, apiKey, judge0ApiKey) {
   try {
     // 1. Instrument code
-    const instrumentedCode = await instrumentCode(language, code, testInput, apiKey);
+    const instrumentedCode = await instrumentCode(editorMode, language, code, testInput, apiKey);
     
+    if (instrumentedCode.startsWith('SYNTAX_ERROR:')) {
+      return {
+        success: false,
+        error: instrumentedCode.replace('SYNTAX_ERROR:', 'Compilation Error:').trim(),
+        frames: []
+      };
+    }
+
     // 2. Determine execution strategy
     const effectiveJudge0Key = judge0ApiKey || process.env.JUDGE0_API_KEY;
     let runResult;
@@ -229,24 +245,30 @@ async function getTrace(language, code, testInput, apiKey, judge0ApiKey) {
     const stdout = runResult.run.stdout || "";
     const lines = stdout.split('\n').filter(l => l.trim().startsWith('{'));
     
-    const frames = lines.map((line, idx) => {
+    let finalResult = null;
+    const rawFrames = [];
+
+    lines.forEach((line) => {
       try {
         const parsed = JSON.parse(line);
-        return {
-          id: idx,
-          line: parsed.line || 1,
-          locals: parsed.vars || {},
-          stdout: "",
-          isError: false
-        };
-      } catch (e) {
-        return null;
-      }
-    }).filter(f => f !== null);
+        if ('result' in parsed) {
+          finalResult = parsed.result;
+        } else {
+          rawFrames.push({
+            line: parsed.line || 1,
+            vars: parsed.vars || {},
+          });
+        }
+      } catch (e) {}
+    });
+
+    // 6. Normalize into richly-typed TraceFrames for frontend
+    const frames = normalizeTrace(rawFrames);
 
     return {
       success: true,
-      frames: frames
+      frames: frames,
+      result: finalResult
     };
 
   } catch (error) {
@@ -257,6 +279,77 @@ async function getTrace(language, code, testInput, apiKey, judge0ApiKey) {
       frames: []
     };
   }
+}
+
+/**
+ * Infers the JS-friendly type string for a value
+ */
+function inferType(val) {
+  if (val === null || val === undefined) return 'NoneType';
+  if (typeof val === 'boolean') return 'bool';
+  if (typeof val === 'number') return Number.isInteger(val) ? 'int' : 'float';
+  if (typeof val === 'string') return 'str';
+  if (Array.isArray(val)) return 'list';
+  if (typeof val === 'object') return 'dict';
+  return 'str';
+}
+
+/**
+ * Converts raw [{line, vars}] into richly-typed TraceFrames
+ * that the frontend Visualizer, Inspector, and Timeline expect.
+ */
+function normalizeTrace(rawFrames) {
+  let prevVars = {};
+
+  return rawFrames.map((raw, idx) => {
+    const variables = {};
+
+    for (const [name, val] of Object.entries(raw.vars || {})) {
+      const type = inferType(val);
+      const prevVal = prevVars[name];
+      const prevValStr = JSON.stringify(prevVal);
+      const currValStr = JSON.stringify(val);
+      const changed = prevValStr !== currValStr;
+
+      variables[name] = {
+        value: val,
+        type: type,
+        changedThisFrame: changed,
+        prevValue: prevVal !== undefined ? prevVal : null,
+      };
+    }
+
+    // Also carry forward variables that existed in the previous frame
+    // but are not in the current frame (they didn't change)
+    for (const [name, val] of Object.entries(prevVars)) {
+      if (!(name in variables)) {
+        variables[name] = {
+          value: val,
+          type: inferType(val),
+          changedThisFrame: false,
+          prevValue: val,
+        };
+      }
+    }
+
+    // Update prevVars for next iteration
+    const currentVarValues = {};
+    for (const [name, info] of Object.entries(variables)) {
+      currentVarValues[name] = info.value;
+    }
+    prevVars = currentVarValues;
+
+    return {
+      id: idx,
+      line: raw.line,
+      variables: variables,
+      callStack: [],
+      eventType: 'line',
+      description: `Line ${raw.line}`,
+      stdout: '',
+      isBugFrame: false,
+    };
+  });
 }
 
 module.exports = {

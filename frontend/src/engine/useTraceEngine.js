@@ -128,7 +128,7 @@ export function useTraceEngine() {
   // ── executeCode ───────────────────────────────────────────
   // Sends code + testInput to the worker and returns the parsed
   // { frames, bugs, error, result } object.
-  const executeCode = useCallback(async (language, code, testInput, apiKey, judge0ApiKey) => {
+  const executeCode = useCallback(async (editorMode, language, code, testInput, apiKey, judge0ApiKey) => {
     if (language === 'python') {
       if (!workerRef.current) throw new Error('Engine not initialised. Call initEngine() first.');
       if (engineStatus !== 'ready') throw new Error('Engine is not ready yet.');
@@ -139,7 +139,7 @@ export function useTraceEngine() {
       try {
         const jsonStr = await sendMsg(
           'EXECUTE',
-          { code, testInput },
+          { editorMode, code, testInput },
           10000, // 10 second timeout per execution
         );
 
@@ -163,7 +163,7 @@ export function useTraceEngine() {
         const res = await fetch('http://localhost:3000/api/execute', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ language, code, testInput: JSON.parse(testInput || '[]'), apiKey, judge0ApiKey })
+          body: JSON.stringify({ editorMode, language, code, testInput: JSON.parse(testInput || '[]'), apiKey, judge0ApiKey })
         });
         const result = await res.json();
         if (result.error) {

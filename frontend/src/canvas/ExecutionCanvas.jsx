@@ -1,5 +1,5 @@
 import React, { useMemo, useCallback } from 'react';
-import { AlertTriangle, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize, Activity } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import {
   detectStructures,
@@ -78,7 +78,7 @@ function CanvasControls({ currentFrame, totalFrames, description, onStep }) {
 
   return (
     <div style={{
-      position: 'absolute', bottom: 16, left: '50%',
+      position: 'absolute', bottom: 40, left: '50%',
       transform: 'translateX(-50%)',
       display: 'flex', alignItems: 'center', gap: 8,
       padding: '8px 16px',
@@ -270,6 +270,53 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
   const isBugFrame = frame?.isBugFrame ?? false;
 
   const [zoom, setZoom] = React.useState(1);
+  const zoomRef = React.useRef(1);
+  const panRef = React.useRef({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = React.useState(false);
+  const dragRef = React.useRef({ startX: 0, startY: 0, startPanX: 0, startPanY: 0 });
+  const contentRef = React.useRef(null);
+
+  // Sync zoom state to ref for handlers
+  React.useEffect(() => {
+    zoomRef.current = zoom;
+    if (contentRef.current) {
+      contentRef.current.style.transform = `translate(${panRef.current.x}px, ${panRef.current.y}px) scale(${zoom})`;
+    }
+  }, [zoom]);
+
+  const handleMouseDown = React.useCallback((e) => {
+    if (e.button !== 0) return; // left click only
+    setIsPanning(true);
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startPanX: panRef.current.x,
+      startPanY: panRef.current.y,
+    };
+  }, []);
+
+  const handleMouseMove = React.useCallback((e) => {
+    if (!isPanning || !contentRef.current) return;
+    const dx = e.clientX - dragRef.current.startX;
+    const dy = e.clientY - dragRef.current.startY;
+    panRef.current = {
+      x: dragRef.current.startPanX + dx,
+      y: dragRef.current.startPanY + dy,
+    };
+    contentRef.current.style.transform = `translate(${panRef.current.x}px, ${panRef.current.y}px) scale(${zoomRef.current})`;
+  }, [isPanning]);
+
+  const handleMouseUp = React.useCallback(() => {
+    setIsPanning(false);
+  }, []);
+
+  const handleWheel = React.useCallback((e) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      setZoom(z => Math.max(0.2, Math.min(3, z + delta)));
+    }
+  }, []);
 
   if (!total || !frame) {
     return <EmptyCanvas />;
@@ -277,16 +324,18 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
 
   return (
     <div style={{
+      flex: 1, width: '100%',
       display: 'flex', flexDirection: 'column',
       height: '100%', position: 'relative',
       outline: isBugFrame ? '2px solid rgba(224,82,82,0.5)' : (isDiffMode && currentFrame >= diffFrameIndex) ? '2px solid rgba(224,82,82,0.3)' : 'none',
       outlineOffset: -2,
       animation: isBugFrame ? 'bug-pulse 2s ease-in-out infinite' : 'none',
       background: (isDiffMode && currentFrame >= diffFrameIndex) ? 'rgba(224,82,82,0.03)' : 'transparent',
+      overflow: 'hidden', // Prevent scrollbars
     }}>
-      {/* Zoom Controls Overlay */}
+      {/* Zoom Controls Overlay — top center, inside canvas */}
       <div style={{
-        position: 'absolute', top: 24, right: 24, zIndex: 40,
+        position: 'absolute', top: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 40,
         display: 'flex', alignItems: 'center', gap: 4,
         background: 'var(--glass-bg)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
         padding: 4, borderRadius: 8,
@@ -302,7 +351,7 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
           <ZoomIn size={14} />
         </button>
         <div style={{ width: 1, height: 16, background: 'var(--border)', margin: '0 4px' }} />
-        <button onClick={() => setZoom(1)} style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', borderRadius: 4 }} onMouseEnter={e => e.currentTarget.style.background = 'var(--border)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'} title="Reset Zoom">
+        <button onClick={() => { setZoom(1); panRef.current = { x: 0, y: 0 }; if (contentRef.current) contentRef.current.style.transform = `translate(0px, 0px) scale(1)`; }} style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', borderRadius: 4 }} onMouseEnter={e => e.currentTarget.style.background = 'var(--border)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'} title="Reset View">
           <Maximize size={14} />
         </button>
       </div>
@@ -316,20 +365,31 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
         />
       )}
 
-      {/* Main content — scrollable */}
-      <div style={{
-        flex: 1, minHeight: 0,
-        overflowY: 'auto', overflowX: 'auto',
-      }}>
-        <div style={{
-          padding: '32px 40px 80px',
-          display: 'flex', flexDirection: 'column', gap: 32,
-          alignItems: 'flex-start',
-          transform: `scale(${zoom})`,
-          transformOrigin: 'top left',
-          transition: 'transform 150ms ease',
-          minWidth: 'max-content',
-        }}>        {/* ── EVENT TYPE BADGE ── */}
+      {/* Main content — pannable container */}
+      <div
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        onWheel={handleWheel}
+        style={{
+          flex: 1,
+          width: '100%', height: '100%',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: isPanning ? 'grabbing' : 'grab',
+        }}
+      >
+        <div
+          ref={contentRef}
+          style={{
+            display: 'flex', flexDirection: 'column', gap: 32,
+            alignItems: 'flex-start',
+            transform: `translate(${panRef.current.x}px, ${panRef.current.y}px) scale(${zoom})`,
+            transition: isPanning ? 'none' : 'transform 100ms ease',
+            minWidth: 'max-content',
+            willChange: 'transform',
+          }}
+        >        {/* ── EVENT TYPE BADGE ── */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
           <EventBadge type={frame.eventType} />
           <span style={{
@@ -344,7 +404,7 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
               background: 'var(--bg-canvas)', border: '1px solid var(--accent-sage)',
               padding: '2px 8px', borderRadius: 12, marginLeft: 16
             }}>
-              <Zap size={12} style={{ color: 'var(--accent-sage)' }} />
+              <Activity size={12} style={{ color: 'var(--accent-sage)' }} />
               <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--accent-sage)', fontWeight: 600 }}>
                 {state.detectedAlgorithm}
               </span>

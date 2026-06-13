@@ -4,13 +4,13 @@ const { getTrace } = require('../services/traceEngine');
 
 router.post('/', async (req, res) => {
   try {
-    const { language, code, testInput, apiKey, judge0ApiKey } = req.body;
+    const { editorMode, language, code, testInput, apiKey, judge0ApiKey } = req.body;
 
     if (!language || !code) {
       return res.status(400).json({ error: 'Language and code are required.' });
     }
 
-    const result = await getTrace(language, code, testInput, apiKey, judge0ApiKey);
+    const result = await getTrace(editorMode, language, code, testInput, apiKey, judge0ApiKey);
 
     if (!result.success) {
       return res.status(400).json({ error: result.error });
@@ -18,7 +18,8 @@ router.post('/', async (req, res) => {
 
     res.json({
       frames: result.frames,
-      bugs: [] // Bugs detection can be implemented via another LLM pass if needed
+      bugs: [], // Bugs detection can be implemented via another LLM pass if needed
+      result: result.result
     });
 
   } catch (error) {

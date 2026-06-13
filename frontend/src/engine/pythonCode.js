@@ -248,82 +248,91 @@ def algolens_run(user_code, test_input):
 
     # ── Compile + define user code (no trace) ─────────────────
     exec_ns = {"__builtins__": __builtins__}
-    try:
-        exec(compile(user_code, USER_FILE, "exec"), exec_ns)
-    except SyntaxError as e:
-        return _json.dumps({
-            "frames": [], "bugs": [],
-            "error": f"SyntaxError: {e.msg} (line {e.lineno})",
-            "result": None,
-        })
-    except Exception as e:
-        return _json.dumps({
-            "frames": [], "bugs": [],
-            "error": f"{type(e).__name__}: {e}",
-            "result": None,
-        })
 
-    # ── Parse test input ──────────────────────────────────────
-    test_ns  = {}
-    test_str = (test_input or "").strip()
-
-    if test_str:
+    if editor_mode != "custom":
         try:
-            exec(compile(test_str, "<testcase>", "exec"), test_ns)
-        except Exception:
-            test_ns = {}
+            exec(compile(user_code, USER_FILE, "exec"), exec_ns)
+        except SyntaxError as e:
+            return _json.dumps({
+                "frames": [], "bugs": [],
+                "error": f"SyntaxError: {e.msg} (line {e.lineno})",
+                "result": None,
+            })
+        except Exception as e:
+            return _json.dumps({
+                "frames": [], "bugs": [],
+                "error": f"{type(e).__name__}: {e}",
+                "result": None,
+            })
 
-    # ── Build call expression ─────────────────────────────────
-    effective = class_method or main_func
-    call_expr = None
+        # ── Parse test input ──────────────────────────────────────
+        test_ns  = {}
+        test_str = (test_input or "").strip()
 
-    if is_class and effective and class_name and class_name in exec_ns:
-        exec_ns["__sol__"] = exec_ns[class_name]()
-        call_target = f"__sol__.{effective}"
-    elif effective:
-        call_target = effective
-    else:
-        call_target = None
+        if test_str:
+            try:
+                exec(compile(test_str, "<testcase>", "exec"), test_ns)
+            except Exception:
+                test_ns = {}
 
-    if call_target:
-        if func_params and all(p in test_ns for p in func_params):
-            args = ", ".join(repr(test_ns[p]) for p in func_params)
-            call_expr = f"__result__ = {call_target}({args})"
-        elif func_params and test_ns:
-            vals = [v for k, v in test_ns.items() if not k.startswith("_")]
-            args = ", ".join(repr(v) for v in vals[:max(len(func_params), 1)])
-            call_expr = f"__result__ = {call_target}({args})"
-        elif test_str and not test_ns:
-            if "(" in test_str and test_str.rstrip().endswith(")"):
-                call_expr = f"__result__ = {test_str}"
-            else:
-                try:
-                    val = eval(test_str, {"__builtins__": {}})
-                    call_expr = f"__result__ = {call_target}({repr(val)})"
-                except Exception:
-                    call_expr = f"__result__ = {call_target}()"
+        # ── Build call expression ─────────────────────────────────
+        effective = class_method or main_func
+        call_expr = None
+
+        if is_class and effective and class_name and class_name in exec_ns:
+            exec_ns["__sol__"] = exec_ns[class_name]()
+            call_target = f"__sol__.{effective}"
+        elif effective:
+            call_target = effective
         else:
-            call_expr = f"__result__ = {call_target}()"
+            call_target = None
 
-    if not call_expr:
-        return _json.dumps({
-            "frames": [], "bugs": [],
-            "error": "Could not determine how to call your function. Check your function definition and testcase format.",
-            "result": None,
-        })
+        if call_target:
+            if func_params and all(p in test_ns for p in func_params):
+                args = ", ".join(repr(test_ns[p]) for p in func_params)
+                call_expr = f"__result__ = {call_target}({args})"
+            elif func_params and test_ns:
+                vals = [v for k, v in test_ns.items() if not k.startswith("_")]
+                args = ", ".join(repr(v) for v in vals[:max(len(func_params), 1)])
+                call_expr = f"__result__ = {call_target}({args})"
+            elif test_str and not test_ns:
+                if "(" in test_str and test_str.rstrip().endswith(")"):
+                    call_expr = f"__result__ = {test_str}"
+                else:
+                    try:
+                        val = eval(test_str, {"__builtins__": {}})
+                        call_expr = f"__result__ = {call_target}({repr(val)})"
+                    except Exception:
+                        call_expr = f"__result__ = {call_target}()"
+            else:
+                call_expr = f"__result__ = {call_target}()"
 
-    # Inject test vars into exec namespace
-    for k, v in test_ns.items():
-        if not k.startswith("_"):
-            exec_ns[k] = v
-    exec_ns["__result__"] = None
+        if not call_expr:
+            return _json.dumps({
+                "frames": [], "bugs": [],
+                "error": "Could not determine how to call your function. Check your function definition and testcase format.",
+                "result": None,
+            })
+
+        # Inject test vars into exec namespace
+        for k, v in test_ns.items():
+            if not k.startswith("_"):
+                exec_ns[k] = v
+        exec_ns["__result__"] = None
 
     # ── Execute with tracing ──────────────────────────────────
     err_msg = None
     try:
-        cc = compile(call_expr, "<call_entry>", "exec")
-        _sys.settrace(tracer)
-        exec(cc, exec_ns)
+        if editor_mode == "custom":
+            # For custom code, just compile and run the whole thing with tracing enabled
+            cc = compile(user_code, USER_FILE, "exec")
+            _sys.settrace(tracer)
+            exec(cc, exec_ns)
+        else:
+            # For leetcode, we already compiled the definitions, now trace the function call
+            cc = compile(call_expr, "<call_entry>", "exec")
+            _sys.settrace(tracer)
+            exec(cc, exec_ns)
     except Exception as e:
         err_msg = f"{type(e).__name__}: {str(e)[:400]}"
         frames.append({

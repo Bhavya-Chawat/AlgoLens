@@ -44,15 +44,15 @@ AlgoLens is an advanced, AI-powered algorithm visualizer and debugger designed t
 
 2. **Setup the Backend:**
    \`\`\`bash
-   cd algolens-backend
+   cd backend
    npm install
-   # Create a .env file and add: GROQ_API_KEY=your_key_here
-   node index.js
+   # Copy .env.example to .env and add: GROQ_API_KEY=your_key_here
+   npm start
    \`\`\`
 
 3. **Setup the Frontend:**
    \`\`\`bash
-   cd ../algolens-app
+   cd ../frontend
    npm install
    npm run dev
    \`\`\`

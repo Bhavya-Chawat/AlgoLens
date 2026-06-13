@@ -42,7 +42,7 @@ export default function AIDebugAssistant() {
     setActiveTabId(newId);
 
     try {
-      const summary = summarizeTrace(executionTrace, '', testcase, detectedBugs);
+      const summary = summarizeTrace(executionTrace, state.lastExecutedCode, testcase, detectedBugs, state.leetcodeProblem);
       const userPrompt = buildPrompt(summary);
 
       const response = await fetch('http://localhost:3000/api/hint', {

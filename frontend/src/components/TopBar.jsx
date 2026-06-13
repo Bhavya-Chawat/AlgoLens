@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, ChevronDown, Play, Sun, Moon, ArrowLeft } from 'lucide-react';
+import { Search, ChevronDown, Play, Sun, Moon, ArrowLeft, Eye } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { LANGUAGE_LABELS, CUSTOM_PLACEHOLDER_CODE } from '../constants/placeholders';
 
@@ -61,18 +61,24 @@ function LanguageSelector() {
             <button
               key={lang.value}
               onClick={() => { 
-                const updates = { language: lang.value };
+                const oldLang = state.language;
+                const newLang = lang.value;
+                if (oldLang === newLang) { setOpen(false); return; }
+
+                // Save current code into codeByLanguage
+                const updatedCodeByLang = { ...state.codeByLanguage, [oldLang]: state.code };
                 
+                let newCode;
                 // If we are in LeetCode mode and have a fetched problem, switch to the new language's snippet
                 if (state.editorMode === 'leetcode' && state.leetcodeProblem?.snippets) {
-                  const snippet = state.leetcodeProblem.snippets.find(s => s.langSlug.toLowerCase() === lang.value.toLowerCase());
-                  if (snippet) updates.code = snippet.code;
-                } else if (state.editorMode === 'custom') {
-                  // Fallback for custom mode
-                  updates.code = CUSTOM_PLACEHOLDER_CODE[lang.value];
+                  const snippet = state.leetcodeProblem.snippets.find(s => s.langSlug.toLowerCase() === newLang.toLowerCase());
+                  newCode = snippet ? snippet.code : (updatedCodeByLang[newLang] || '');
+                } else {
+                  // Restore previously saved code for this language, or empty
+                  newCode = updatedCodeByLang[newLang] || '';
                 }
 
-                update(updates); 
+                update({ language: newLang, code: newCode, codeByLanguage: updatedCodeByLang }); 
                 setOpen(false); 
               }}
               style={{
@@ -272,55 +278,82 @@ function ApiKeySettings() {
 }
 
 // ============================================================
-// DEBUG BUTTON (Editor View CTA in topbar)
 // ============================================================
-function DebugButton({ onRun }) {
+// DEBUG BUTTONS (Editor View CTAs in topbar)
+// ============================================================
+function ActionButtons({ onRun, onVisualise }) {
   const { state } = useApp();
   const busy = state.isRunning;
 
   return (
-    <button
-      id="debug-visually-btn"
-      onClick={onRun}
-      disabled={busy}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 6,
-        padding: '6px 16px',
-        background: busy ? 'var(--accent-sage-hover)' : 'var(--accent-sage)',
-        border: 'none',
-        borderRadius: 'var(--radius-md)',
-        color: '#fff',
-        fontSize: 'var(--text-body)',
-        fontWeight: 500,
-        fontFamily: 'var(--font-sans)',
-        cursor: busy ? 'not-allowed' : 'pointer',
-        letterSpacing: '0.01em',
-        transition: 'all var(--motion-standard)',
-        flexShrink: 0,
-      }}
-      onMouseEnter={(e) => { if (!busy) e.currentTarget.style.background = 'var(--accent-sage-hover)'; }}
-      onMouseLeave={(e) => { if (!busy) e.currentTarget.style.background = 'var(--accent-sage)'; }}
-      onMouseDown={(e) => { if (!busy) e.currentTarget.style.transform = 'scale(0.97)'; }}
-      onMouseUp={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
-    >
-      {busy ? (
-        <>
-          <span style={{
-            width: 10, height: 10, borderRadius: '50%',
-            border: '2px solid rgba(255,255,255,0.4)',
-            borderTopColor: '#fff',
-            animation: 'spin 600ms linear infinite',
-            display: 'inline-block', flexShrink: 0,
-          }} />
-          Running…
-        </>
-      ) : (
-        <>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      {state.editorMode === 'custom' && (
+        <button
+          onClick={onRun}
+          disabled={busy}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '6px 16px',
+            background: busy ? 'var(--bg-canvas)' : 'var(--bg-card)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)',
+            color: busy ? 'var(--text-muted)' : 'var(--text-primary)',
+            fontSize: 'var(--text-body)',
+            fontWeight: 500,
+            fontFamily: 'var(--font-sans)',
+            cursor: busy ? 'not-allowed' : 'pointer',
+            transition: 'all var(--motion-standard)',
+          }}
+          onMouseEnter={(e) => { if (!busy) e.currentTarget.style.background = 'var(--bg-canvas)'; }}
+          onMouseLeave={(e) => { if (!busy) e.currentTarget.style.background = 'var(--bg-card)'; }}
+        >
           <Play size={11} fill="currentColor" />
-          Debug Visually
-        </>
+          Run
+        </button>
       )}
-    </button>
+
+      <button
+        id="debug-visually-btn"
+        onClick={onVisualise}
+        disabled={busy}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '6px 16px',
+          background: busy ? 'var(--accent-sage-hover)' : 'var(--accent-sage)',
+          border: 'none',
+          borderRadius: 'var(--radius-md)',
+          color: '#fff',
+          fontSize: 'var(--text-body)',
+          fontWeight: 500,
+          fontFamily: 'var(--font-sans)',
+          cursor: busy ? 'not-allowed' : 'pointer',
+          letterSpacing: '0.01em',
+          transition: 'all var(--motion-standard)',
+        }}
+        onMouseEnter={(e) => { if (!busy) e.currentTarget.style.background = 'var(--accent-sage-hover)'; }}
+        onMouseLeave={(e) => { if (!busy) e.currentTarget.style.background = 'var(--accent-sage)'; }}
+        onMouseDown={(e) => { if (!busy) e.currentTarget.style.transform = 'scale(0.97)'; }}
+        onMouseUp={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+      >
+        {busy ? (
+          <>
+            <span style={{
+              width: 10, height: 10, borderRadius: '50%',
+              border: '2px solid rgba(255,255,255,0.4)',
+              borderTopColor: '#fff',
+              animation: 'spin 600ms linear infinite',
+              display: 'inline-block', flexShrink: 0,
+            }} />
+            Running…
+          </>
+        ) : (
+          <>
+            <Eye size={12} strokeWidth={2.5} />
+            Visualise
+          </>
+        )}
+      </button>
+    </div>
   );
 }
 
@@ -328,7 +361,7 @@ function DebugButton({ onRun }) {
 // ============================================================
 // TOPBAR — adapts per view
 // ============================================================
-export default function TopBar({ onRun }) {
+export default function TopBar({ onRun, onVisualise }) {
   const { state, update } = useApp();
   const isVisualizer = state.view === 'visualizer';
 
@@ -407,7 +440,7 @@ export default function TopBar({ onRun }) {
         <ApiKeySettings />
         <LanguageSelector />
         <div style={{ width: 1, height: 18, background: 'var(--border)' }} />
-        {!isVisualizer && <DebugButton onRun={onRun} />}
+        {!isVisualizer && <ActionButtons onRun={onRun} onVisualise={onVisualise} />}
         <ThemeToggle />
       </div>
     </header>

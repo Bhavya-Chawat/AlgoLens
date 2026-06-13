@@ -46,15 +46,16 @@ async function setup(id, pythonCode) {
   }
 }
 
-async function execute(id, code, testInput) {
+async function execute(id, editorMode, code, testInput) {
   try {
     if (!pyodide) throw new Error('Engine not initialised');
 
     // Pass code safely via globals (avoids any quoting/escaping issues)
+    pyodide.globals.set('__editor_mode__', editorMode);
     pyodide.globals.set('__user_code__', code);
     pyodide.globals.set('__test_input__', testInput);
 
-    const jsonStr = pyodide.runPython('algolens_run(__user_code__, __test_input__)');
+    const jsonStr = pyodide.runPython('algolens_run(__editor_mode__, __user_code__, __test_input__)');
     post({ type: 'RESULT', id, data: jsonStr });
   } catch (err) {
     post({ type: 'ERROR', id, error: err.message || String(err) });
@@ -67,7 +68,7 @@ self.onmessage = async function (e) {
   if (type === 'SETUP') {
     await setup(id, payload.pythonCode);
   } else if (type === 'EXECUTE') {
-    await execute(id, payload.code, payload.testInput);
+    await execute(id, payload.editorMode, payload.code, payload.testInput);
   } else if (type === 'PING') {
     self.postMessage({ type: 'PONG', id });
   }

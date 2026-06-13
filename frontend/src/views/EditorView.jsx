@@ -534,7 +534,7 @@ function HeroDebugButton({ onRun, engineStatus, engineMessage }) {
     ? (engineMessage?.slice(0, 34) || 'Initialising runtime…')
     : engineStatus === 'executing'
     ? 'Executing…'
-    : 'Debug Visually';
+    : 'Visualise';
 
   return (
     <button
@@ -594,8 +594,45 @@ function HeroDebugButton({ onRun, engineStatus, engineMessage }) {
 }
 
 // ============================================================
-// EDITOR VIEW
+// CONSOLE OUTPUT PANEL
 // ============================================================
+function ConsoleOutput({ result, error, onClose }) {
+  if (!result && !error) return null;
+
+  return (
+    <div className="animate-fade-in-up" style={{
+      marginTop: 12, padding: 0, background: 'var(--bg-canvas)',
+      border: '1px solid var(--border)', borderRadius: 8,
+      display: 'flex', flexDirection: 'column',
+      maxHeight: 200, overflow: 'hidden'
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '8px 12px', borderBottom: '1px solid var(--border)', background: 'var(--bg-card)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+            Console Output
+          </span>
+          {error && <span style={{ padding: '2px 6px', background: 'rgba(224,82,82,0.1)', color: '#E05252', borderRadius: 4, fontSize: 10, fontWeight: 600 }}>Error</span>}
+          {result && !error && <span style={{ padding: '2px 6px', background: 'rgba(16,185,129,0.1)', color: '#10B981', borderRadius: 4, fontSize: 10, fontWeight: 600 }}>Success</span>}
+        </div>
+        <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+          <X size={14} />
+        </button>
+      </div>
+      <div style={{
+        padding: '12px', overflowY: 'auto',
+        fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.5,
+        color: error ? '#E05252' : 'var(--text-primary)',
+        whiteSpace: 'pre-wrap'
+      }}>
+        {error ? error : result}
+      </div>
+    </div>
+  );
+}
+
 export default function EditorView() {
   const { state, update, traceEngine } = useApp();
   const {
@@ -604,12 +641,14 @@ export default function EditorView() {
   } = traceEngine;
 
   const [runError, setRunError] = useState(null);
+  const [runOutput, setRunOutput] = useState(null);
 
-  const handleRun = useCallback(async () => {
+  const handleExecute = useCallback(async (isVisualiseMode) => {
     if (engineStatus === 'loading' || engineStatus === 'executing') return;
     setRunError(null);
+    setRunOutput(null);
 
-    update({ isRunning: true });
+    update({ isRunning: true, globalLoading: isVisualiseMode, globalLoadingText: 'Instrumenting & executing code…' });
 
     try {
       // Step 1: init Pyodide if needed (only for python)
@@ -633,26 +672,40 @@ export default function EditorView() {
       else if (state.editorMode === 'custom') testInput = '[]';
 
       // Step 3: execute
-      const result = await executeCode(state.language, code, testInput, state.customApiKey, state.judge0ApiKey);
+      const result = await executeCode(state.editorMode, state.language, code, testInput, state.customApiKey, state.judge0ApiKey);
 
-      // If the runtime reported a syntax/compilation error and produced no frames, stay in editor
-      if (result.error && (!result.frames || result.frames.length === 0)) {
-        setRunError(result.error);
-        update({ isRunning: false, view: 'editor' });
+      // Check for syntax errors or execution exceptions
+      const frames = result.frames || [];
+      const hasException = frames.length > 0 && frames[frames.length - 1].isBugFrame && frames[frames.length - 1].severity === 'error';
+      const actualError = result.error || (hasException ? frames[frames.length - 1].description : null);
+
+      if (actualError || frames.length === 0) {
+        setRunError(actualError || 'Execution produced no trace. Possible syntax error.');
+        update({ isRunning: false, view: 'editor', globalLoading: false });
         return;
       }
 
-      // Step 4: populate context + navigate
+      // If it's a successful run and we just clicked "Run"
+      if (!isVisualiseMode) {
+        const lastFrame = frames[frames.length - 1];
+        setRunOutput(`Execution finished in ${frames.length} steps.\nReturn Value: ${lastFrame.returnValue !== undefined ? JSON.stringify(lastFrame.returnValue) : 'None'}`);
+        update({ isRunning: false, globalLoading: false });
+        return;
+      }
+
+      // Step 4: populate context + navigate to visualizer
       update({
         isRunning:      false,
+        globalLoading:  false,
         view:           'visualizer',
-        executionTrace: result.frames   || [],
+        executionTrace: frames,
         currentFrame:   0,
-        detectedBugs:   result.bugs     || [],
+        detectedBugs:   result.bugs || [],
+        lastExecutedCode: code,
       });
     } catch (err) {
       setRunError(err.message || 'Execution failed.');
-      update({ isRunning: false });
+      update({ isRunning: false, globalLoading: false });
     }
   }, [engineStatus, isReady, initEngine, executeCode, state, update]);
 
@@ -661,7 +714,7 @@ export default function EditorView() {
       display: 'flex', flexDirection: 'column',
       height: '100%', background: 'var(--bg-page)',
     }}>
-      <TopBar onRun={handleRun} />
+      <TopBar onRun={() => handleExecute(false)} onVisualise={() => handleExecute(true)} />
 
       {/* Main body */}
       <div style={{
@@ -677,6 +730,13 @@ export default function EditorView() {
           gap: 12, minHeight: 0,
         }}>
           <CodeEditor mode="edit" style={{ flex: 1 }} />
+
+          {/* Console output panel */}
+          <ConsoleOutput
+            result={runOutput}
+            error={runError}
+            onClose={() => { setRunError(null); setRunOutput(null); }}
+          />
 
           {/* Error banner */}
           <ErrorBanner
@@ -705,7 +765,7 @@ export default function EditorView() {
           <TestPanel />
           {state.editorMode === 'leetcode' && state.leetcodeProblem && <SessionCard />}
           <HeroDebugButton
-            onRun={handleRun}
+            onRun={() => handleExecute(true)}
             engineStatus={engineStatus}
             engineMessage={engineMessage}
           />

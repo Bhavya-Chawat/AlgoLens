@@ -10,25 +10,24 @@ FOR /F "tokens=5" %%T IN ('netstat -a -n -o ^| findstr :5174') DO (taskkill /F /
 
 echo Starting AlgoLens Full-Stack Environment...
 
-:: Start Backend
+:: Check Backend dependencies
 cd backend
 IF NOT EXIST "node_modules\" (
     echo [Backend] node_modules not found. Installing dependencies...
     call npm install
 )
-echo [Backend] Launching Node.js API server...
-start "AlgoLens Backend" cmd /c "npm start"
 cd ..
 
-:: Start Frontend
+:: Check Frontend dependencies
 cd frontend
 IF NOT EXIST "node_modules\" (
     echo [Frontend] node_modules not found. Installing dependencies...
     call npm install
 )
-echo [Frontend] Launching React app...
-start "AlgoLens Frontend" cmd /c "npm run dev"
 cd ..
+
+echo [Frontend & Backend] Launching in Windows Terminal tabs...
+wt -d .\backend cmd /k "title AlgoLens Backend && npm start" ; new-tab -d .\frontend cmd /k "title AlgoLens Frontend && npm run dev"
 
 echo.
 echo ========================================================

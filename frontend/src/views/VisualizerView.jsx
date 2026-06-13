@@ -3,7 +3,6 @@ import { ChevronLeft, ChevronRight, Zap, AlertTriangle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import TopBar from '../components/TopBar';
 import Timeline from '../components/Timeline';
-import CodeEditor from '../components/CodeEditor';
 import ExecutionCanvas from '../canvas/ExecutionCanvas';
 import InspectorPanel from '../components/inspector/InspectorPanel';
 import AIDebugAssistant from '../components/AIDebugAssistant';
@@ -151,7 +150,9 @@ function ProblemCard() {
 // LEFT PANEL (Editor, Testcases, Diff Debug)
 // ============================================================
 function LeftPanel({ isOpen, onToggle, activeLine }) {
-  const [activeTab, setActiveTab] = React.useState('editor');
+  const [activeTab, setActiveTab] = React.useState('code');
+  const { state, update } = useApp();
+  const codeChanged = state.code !== state.lastExecutedCode && state.lastExecutedCode !== '';
 
   return (
     <div style={{
@@ -169,7 +170,7 @@ function LeftPanel({ isOpen, onToggle, activeLine }) {
       }}>
         {/* TABS HEADER */}
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
-          {['editor', 'testcases', 'diff'].map(tab => (
+          {['code', 'testcases', 'diff'].map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -181,21 +182,73 @@ function LeftPanel({ isOpen, onToggle, activeLine }) {
                 borderBottom: activeTab === tab ? '2px solid var(--accent-sage)' : '2px solid transparent'
               }}
             >
-              {tab === 'diff' ? 'Diff Debug' : tab}
+              {tab === 'diff' ? 'Diff Debug' : tab === 'code' ? 'Code' : tab}
             </button>
           ))}
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-          {activeTab === 'editor' && (
+          {activeTab === 'code' && (
             <>
-              <div style={{ flex: '1 1 auto', minHeight: 300, padding: 16 }}>
-                <CodeEditor
-                  mode="readonly"
-                  activeLineIndex={activeLine}
-                  style={{ height: '100%', border: 'none', borderRadius: 'var(--radius-md)' }}
-                />
+              {/* Code changed banner */}
+              {codeChanged && (
+                <div style={{
+                  margin: 16, padding: '12px 16px',
+                  background: 'rgba(231,195,106,0.12)',
+                  border: '1px solid rgba(231,195,106,0.35)',
+                  borderRadius: 10,
+                  display: 'flex', alignItems: 'center', gap: 10,
+                }}>
+                  <span style={{ fontSize: 16 }}>⚠️</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#8C6A14', marginBottom: 4 }}>Code has changed</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>The editor code differs from the last execution.</div>
+                  </div>
+                  <button
+                    onClick={() => update({ view: 'editor' })}
+                    style={{
+                      padding: '6px 12px', background: '#B08A30', color: '#fff',
+                      border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Re-run
+                  </button>
+                </div>
+              )}
+
+              {/* Current line indicator */}
+              {activeLine >= 0 && (
+                <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{
+                    padding: '4px 10px', background: 'rgba(143,175,157,0.12)',
+                    border: '1px solid rgba(143,175,157,0.3)', borderRadius: 20,
+                    fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--accent-sage)', fontWeight: 600,
+                  }}>
+                    Line {activeLine + 1}
+                  </div>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>currently executing</span>
+                </div>
+              )}
+
+              {/* Back to Editor button */}
+              <div style={{ padding: '0 16px 16px' }}>
+                <button
+                  onClick={() => update({ view: 'editor' })}
+                  style={{
+                    width: '100%', padding: '10px',
+                    background: 'var(--bg-canvas)', color: 'var(--text-primary)',
+                    border: '1px solid var(--border)', borderRadius: 8,
+                    fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                    transition: 'background var(--motion-standard)',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--border)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-canvas)'}
+                >
+                  ← Open Editor
+                </button>
               </div>
+
               <div style={{ height: 1, background: 'var(--border)', margin: '0 16px 16px' }} />
               <BugsPanel />
               <ProblemCard />

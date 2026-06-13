@@ -1,6 +1,6 @@
-export function summarizeTrace(trace, code, testInput, bugs) {
+export function summarizeTrace(trace, code, testInput, bugs, leetcodeProblem) {
   const summary = {
-    language: 'Python',
+    language: 'Python/Java/CPP/JS',
     totalFrames: trace.length,
     testInput: testInput || 'None provided',
     actualOutput: null,
@@ -9,6 +9,8 @@ export function summarizeTrace(trace, code, testInput, bugs) {
     variableChanges: [],
     suspiciousPatterns: [],
     bugs: [],
+    userCode: code || 'Not provided',
+    problemContext: leetcodeProblem ? `Title: ${leetcodeProblem.title}\nDescription: ${leetcodeProblem.description}` : 'Not provided'
   };
 
   if (!trace || trace.length === 0) return summary;
@@ -82,6 +84,12 @@ export function summarizeTrace(trace, code, testInput, bugs) {
 export function buildPrompt(summary) {
   return `Analyze this execution trace:
 
+LeetCode Problem Context:
+${summary.problemContext}
+
+User Code:
+${summary.userCode}
+
 Language: ${summary.language}
 Test input: ${summary.testInput}
 Actual output: ${summary.actualOutput}
@@ -98,5 +106,5 @@ ${summary.suspiciousPatterns.join('\n')}
 
 Maximum recursion depth: ${summary.callStackMaxDepth}
 
-Provide your analysis.`;
+Provide your analysis. Remember, if the user's logic perfectly solves the problem, say "Looks good!" and validate it. Otherwise, provide a slight hint.`;
 }

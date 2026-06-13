@@ -6,17 +6,34 @@ import { useTraceEngine } from '../engine/useTraceEngine';
 // ============================================================
 const AppContext = createContext(null);
 
+const savedCodeByLang = (() => {
+  try {
+    const raw = typeof localStorage !== 'undefined' && localStorage.getItem('algolens-codeByLanguage');
+    return raw ? JSON.parse(raw) : { python: '', java: '', cpp: '', javascript: '' };
+  } catch { return { python: '', java: '', cpp: '', javascript: '' }; }
+})();
+
+const savedSession = (() => {
+  try {
+    const raw = typeof localStorage !== 'undefined' && localStorage.getItem('algolens-session');
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+})();
+
 const INITIAL_STATE = {
   // Navigation
   view: 'editor',            // 'editor' | 'visualizer'
 
   // Session
-  editorMode: 'custom',      // 'custom' | 'leetcode'
+  editorMode: savedSession.editorMode || 'custom',      // 'custom' | 'leetcode'
+  leetcodeProblem: savedSession.leetcodeProblem || null,
   isLeetcodeModalOpen: false,
   language: 'python',
-  code: '',
+  code: savedCodeByLang.python || '',
+  codeByLanguage: savedCodeByLang,
   testInput: '',
-  customInputs: [{ key: 'nums', val: '[1, 2, 3, 4, 5]' }],
+  customInputs: savedSession.customInputs || [{ key: 'nums', val: '[1, 2, 3, 4, 5]' }],
+  lastExecutedCode: '',
 
   // Execution
   isRunning: false,
@@ -85,6 +102,22 @@ export function AppProvider({ children }) {
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, [update]);
+
+  // Persist code per language to localStorage
+  useEffect(() => {
+    const updated = { ...state.codeByLanguage, [state.language]: state.code };
+    localStorage.setItem('algolens-codeByLanguage', JSON.stringify(updated));
+  }, [state.code, state.language]);
+
+  // Persist session to localStorage
+  useEffect(() => {
+    const sessionData = {
+      editorMode: state.editorMode,
+      leetcodeProblem: state.leetcodeProblem,
+      customInputs: state.customInputs
+    };
+    localStorage.setItem('algolens-session', JSON.stringify(sessionData));
+  }, [state.editorMode, state.leetcodeProblem, state.customInputs]);
 
   return (
     <AppContext.Provider value={{ state, update, traceEngine }}>
