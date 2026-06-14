@@ -15,13 +15,112 @@ const DEPTH_COLORS = { 0: '#8FAF9D', 1: '#D49B84', 2: '#E7C36A' };
 function depthColor(d) { return DEPTH_COLORS[d] ?? '#9CA3AF'; }
 
 // ============================================================
-// ARRAY VISUALIZER
+// ARRAY & 2D GRID/MATRIX VISUALIZER
 // ============================================================
 function ArrayVisualizer({ mainArray, pointers, isBugFrame, prevVars }) {
-  const { name, info } = mainArray;
-  const values  = info.value;
-  const n       = values.length;
+  const { name, info, is2D, window: slidingWindow, highlights } = mainArray;
+  const values  = info.value || [];
+  
+  if (is2D && Array.isArray(values)) {
+    const rows = values.length;
+    const cols = values[0] ? values[0].length : 0;
+    const prevGrid = prevVars?.[name]?.value;
 
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
+        {/* Label */}
+        <div style={{
+          fontSize: 11, fontFamily: 'var(--font-mono)',
+          color: 'var(--canvas-text-muted)',
+          marginBottom: 4,
+          display: 'flex', alignItems: 'center', gap: 6,
+        }}>
+          <span style={{ color: depthColor(1), fontWeight: 600 }}>{name}</span>
+          <span style={{ opacity: 0.6 }}>[{rows} × {cols} Grid]</span>
+          {info.changedThisFrame && (
+            <span style={{
+              fontSize: 10, padding: '1px 6px',
+              background: 'rgba(231,195,106,0.18)',
+              color: '#B08A30', borderRadius: 10, fontWeight: 500,
+            }}>changed</span>
+          )}
+        </div>
+
+        {/* 2D Matrix Grid */}
+        <div style={{
+          border: '1.5px solid var(--border)',
+          borderRadius: 8,
+          padding: 6,
+          background: 'var(--bg-canvas)',
+          display: 'inline-block',
+          boxShadow: 'var(--shadow-card)',
+          maxHeight: 400,
+          maxWidth: '100%',
+          overflow: 'auto',
+        }}>
+          <table style={{ borderCollapse: 'separate', borderSpacing: 2 }}>
+            <thead>
+              <tr>
+                <th style={{ minWidth: 24, height: 20 }}></th>
+                {Array.from({ length: cols }).map((_, c) => (
+                  <th key={c} style={{
+                    fontSize: 9, fontFamily: 'var(--font-mono)',
+                    color: 'var(--canvas-text-muted)',
+                    textAlign: 'center',
+                    fontWeight: 600
+                  }}>
+                    {c}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {values.map((row, r) => (
+                <tr key={r}>
+                  {/* Row index header */}
+                  <td style={{
+                    fontSize: 9, fontFamily: 'var(--font-mono)',
+                    color: 'var(--canvas-text-muted)',
+                    textAlign: 'right',
+                    paddingRight: 6,
+                    fontWeight: 600
+                  }}>
+                    {r}
+                  </td>
+                  {Array.isArray(row) && row.map((cell, c) => {
+                    const cellChanged = prevGrid && prevGrid[r] && prevGrid[r][c] !== cell;
+                    return (
+                      <td key={c}>
+                        <div style={{
+                          width: cols > 12 ? 32 : 44,
+                          height: cols > 12 ? 32 : 44,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background: cellChanged ? 'rgba(231,195,106,0.25)' : 'var(--bg-card)',
+                          border: cellChanged ? '1.5px solid var(--accent-amber)' : '1px solid var(--border)',
+                          borderRadius: 6,
+                          fontSize: cols > 12 ? 11 : 13,
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 600,
+                          color: cellChanged ? '#B08A30' : 'var(--canvas-text-primary)',
+                          transition: 'all 200ms ease',
+                        }}>
+                          {String(cell).length > 4 ? String(cell).slice(0, 3) + '…' : String(cell)}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+  const n       = values.length;
   const cellW = n <= 8 ? 64 : n <= 16 ? 52 : n <= 32 ? 40 : 32;
   const cellH = 52;
   const totalW = n * cellW;
@@ -30,15 +129,16 @@ function ArrayVisualizer({ mainArray, pointers, isBugFrame, prevVars }) {
   // Set of indices pointed to by pointer vars
   const pointedIndices = new Set(Object.values(pointers).filter(v => v >= 0 && v < n));
 
-  // Which indices changed from prev frame?
+  // Which indices changed from prev frame? (or use LLM highlights if provided)
   const prevArr = prevVars?.[name]?.value;
   const changedIdx = useMemo(() => {
+    if (highlights && highlights.length > 0) return new Set(highlights);
     const s = new Set();
     if (Array.isArray(prevArr) && Array.isArray(values)) {
       values.forEach((v, i) => { if (prevArr[i] !== v) s.add(i); });
     }
     return s;
-  }, [prevArr, values]);
+  }, [prevArr, values, highlights]);
 
   // Group pointers by index to stack labels
   const ptrByIdx = useMemo(() => {
@@ -78,6 +178,26 @@ function ArrayVisualizer({ mainArray, pointers, isBugFrame, prevVars }) {
 
       {/* Cells */}
       <div style={{ display: 'flex', position: 'relative' }}>
+        
+        {/* Sliding Window Overlay */}
+        {slidingWindow && slidingWindow.length === 2 && (
+          <div style={{
+            position: 'absolute',
+            top: -4,
+            left: Math.max(0, slidingWindow[0]) * cellW - 4,
+            width: (Math.min(values.length - 1, slidingWindow[1]) - Math.max(0, slidingWindow[0]) + 1) * cellW + 8,
+            height: cellH + 8,
+            border: '2px dashed var(--accent-sage)',
+            background: 'rgba(143,175,157,0.05)',
+            borderRadius: 8,
+            pointerEvents: 'none',
+            zIndex: 10,
+            transition: 'all 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+          }}>
+            <div style={{ position: 'absolute', top: -20, left: '50%', transform: 'translateX(-50%)', background: 'var(--accent-sage)', color: 'white', fontSize: 9, fontFamily: 'var(--font-mono)', padding: '2px 6px', borderRadius: 10, fontWeight: 700 }}>WINDOW</div>
+          </div>
+        )}
+
         {values.map((val, i) => {
           const active   = pointedIndices.has(i);
           const changed  = changedIdx.has(i);
@@ -336,29 +456,107 @@ function HashMapVisualizer({ hashmaps, prevVars }) {
 }
 
 // ============================================================
-// GENERIC VARIABLE BOARD
-// Shows when no specific structure detected
+// BIT VISUALIZER FOR INTEGERS
 // ============================================================
-function GenericBoard({ vars }) {
+function BitVisualizer({ value }) {
+  if (value === undefined || value === null) return null;
+  const numVal = Number(value);
+  if (!Number.isInteger(numVal)) return null;
+  
+  // Decide bit depth representation (8, 16 or 32 bits)
+  const absVal = Math.abs(numVal);
+  const bitsCount = absVal > 65535 ? 32 : (absVal > 255 ? 16 : 8);
+  const binaryStr = (numVal >>> 0).toString(2).padStart(bitsCount, '0').slice(-bitsCount);
+  
+  // Split bits into chunks of 4 for readability
+  const bitGroups = [];
+  for (let i = 0; i < bitsCount; i += 4) {
+    bitGroups.push(binaryStr.slice(i, i + 4));
+  }
+
+  return (
+    <div style={{ 
+      marginTop: 8, 
+      paddingTop: 8, 
+      borderTop: '1px dashed var(--border)',
+      display: 'flex', 
+      flexDirection: 'column', 
+      gap: 3 
+    }}>
+      <div style={{ 
+        fontSize: 8, 
+        fontFamily: 'var(--font-mono)', 
+        color: 'var(--canvas-text-muted)', 
+        letterSpacing: '0.04em',
+        fontWeight: 600
+      }}>
+        BITS: {bitsCount}-bit
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+        {bitGroups.map((group, gi) => (
+          <div key={gi} style={{ display: 'flex', gap: 1.5 }}>
+            {group.split('').map((bit, bi) => {
+              const globalIndex = bitsCount - 1 - (gi * 4 + bi);
+              return (
+                <div 
+                  key={bi}
+                  style={{
+                    width: 12, height: 14,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700,
+                    background: bit === '1' ? 'rgba(231,195,106,0.2)' : 'var(--bg-canvas)',
+                    color: bit === '1' ? 'var(--accent-amber)' : 'var(--canvas-text-muted)',
+                    border: bit === '1' ? '1px solid var(--accent-amber)' : '1px solid var(--border)',
+                    borderRadius: 2,
+                    cursor: 'help'
+                  }}
+                  title={`Bit ${globalIndex} (Value: ${Math.pow(2, globalIndex)})`}
+                >
+                  {bit}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// GENERIC BOARD VISUALIZER
+// ============================================================
+function GenericBoard({ vars, isBitwise = false }) {
   const entries = Object.entries(vars);
-  if (!entries.length) return null;
+  if (entries.length === 0) {
+    return (
+      <div style={{
+        fontSize: 12, color: 'var(--canvas-text-muted)',
+        fontStyle: 'italic',
+      }}>
+        No local variables
+      </div>
+    );
+  }
 
   return (
     <div style={{
-      display: 'flex', flexWrap: 'wrap', gap: 12,
-      alignContent: 'flex-start',
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+      gap: 12,
     }}>
       {entries.map(([name, info]) => {
         const changed = info.changedThisFrame;
-        const valStr  = formatValue(info.value);
-
+        const valStr = formatValue(info.value ?? info);
+        const isInt = info.type === 'int' || Number.isInteger(info.value ?? info);
+        const isBitName = /^(mask|bits?|xor|pow|bin|res)$/i.test(name);
+        
         return (
           <div
             key={name}
             style={{
-              minWidth: 100, maxWidth: 220,
-              padding: '10px 14px',
-              background: 'var(--bg-card)',
+              background: changed ? 'rgba(231,195,106,0.06)' : 'var(--bg-card)',
+              padding: 12,
               border: '1px solid var(--border)',
               borderRadius: 10,
               borderLeft: changed ? '3px solid var(--accent-sage)' : '1px solid var(--border)',
@@ -384,8 +582,12 @@ function GenericBoard({ vars }) {
             }}>
               {valStr}
             </div>
+            
+            {/* Render Bit Visualizer for binary display during bitwise operations */}
+            {(isInt && (isBitwise || isBitName)) && <BitVisualizer value={info.value ?? info} />}
+
             <div style={{
-              marginTop: 6,
+              marginTop: 8,
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             }}>
               <span style={{
@@ -573,23 +775,26 @@ function typeColor(type) {
 // LINKED LIST VISUALIZER
 // ============================================================
 function LinkedListVisualizer({ listData, pointers, prevVars }) {
-  const { name, info } = listData;
-  const head = info.value;
+  const { name, info, nodes: aiNodes } = listData;
+  const head = info?.value;
 
-  // Flatten linked list for horizontal rendering
-  const nodes = [];
-  let curr = head;
-  let cycleDetected = false;
-  const seen = new Set();
-  
-  while (curr && curr !== null) {
-    if (seen.has(curr)) {
-      cycleDetected = true;
-      break;
+  // Use AI nodes if provided, else fallback to flattening head
+  let nodes = [];
+  if (aiNodes && Array.isArray(aiNodes) && aiNodes.length > 0) {
+    nodes = aiNodes;
+  } else {
+    let curr = head;
+    let cycleDetected = false;
+    const seen = new Set();
+    while (curr && curr !== null) {
+      if (seen.has(curr)) {
+        cycleDetected = true;
+        break;
+      }
+      seen.add(curr);
+      nodes.push(curr);
+      curr = curr.next;
     }
-    seen.add(curr);
-    nodes.push(curr);
-    curr = curr.next;
   }
 
   const cellW = 52;
@@ -614,38 +819,85 @@ function LinkedListVisualizer({ listData, pointers, prevVars }) {
 
       <div style={{ display: 'flex', alignItems: 'center' }}>
         {nodes.map((node, i) => {
-          // Identify if any pointers point to this node
-          // In real trace, pointers to nodes might be references or specific IDs.
-          // For simplicity, we just render the node.
           const val = node.val ?? node.data ?? node.value ?? '?';
+          const hl = node.highlight || 'none';
+          
+          let bg = 'var(--bg-card)';
+          let border = '1.5px solid var(--border)';
+          let textColor = 'var(--canvas-text-primary)';
+          let opacity = 1;
+          let scale = 1;
+
+          if (hl === 'active') {
+            bg = 'rgba(231,195,106,0.15)';
+            border = '1.5px solid var(--accent-amber)';
+            textColor = '#B08A30';
+          } else if (hl === 'visited') {
+            bg = 'rgba(143,175,157,0.10)';
+            border = '1.5px solid rgba(143,175,157,0.5)';
+            textColor = '#6A9F82';
+          } else if (hl === 'created') {
+            bg = 'rgba(16,185,129,0.2)';
+            border = '1.5px solid #10B981';
+            textColor = '#059669';
+            scale = 1.05;
+          } else if (hl === 'deleted') {
+            bg = 'rgba(224,82,82,0.1)';
+            border = '1.5px dashed #E05252';
+            textColor = '#E05252';
+            opacity = 0.5;
+          }
+
           return (
             <React.Fragment key={i}>
-              <div style={{
-                width: cellW, height: cellH,
-                border: '1.5px solid var(--border)',
-                borderRadius: '8px',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: 'var(--bg-card)',
-                position: 'relative'
-              }}>
-                <span style={{
-                  fontSize: 14, fontFamily: 'var(--font-mono)',
-                  fontWeight: 600, color: 'var(--canvas-text-primary)'
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                {/* Node Box */}
+                <div style={{
+                  width: cellW, height: cellH,
+                  border: border,
+                  borderRadius: '8px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: bg,
+                  opacity: opacity,
+                  transform: `scale(${scale})`,
+                  transition: 'all 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+                  position: 'relative'
                 }}>
-                  {String(val).slice(0, 4)}
-                </span>
+                  <span style={{
+                    fontSize: 14, fontFamily: 'var(--font-mono)',
+                    fontWeight: 600, color: textColor,
+                    transition: 'color 300ms ease'
+                  }}>
+                    {String(val).slice(0, 4)}
+                  </span>
+                </div>
+                {/* Label (Pointers) */}
+                {node.label && (
+                  <span style={{
+                    fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 600,
+                    color: hl === 'active' ? 'var(--accent-amber)' : 'var(--text-secondary)',
+                    padding: '2px 6px', background: 'var(--bg-canvas)', borderRadius: 4,
+                    border: '1px solid var(--border)'
+                  }}>
+                    {node.label}
+                  </span>
+                )}
               </div>
+              
               {/* Arrow */}
               {i < nodes.length - 1 && (
                 <div style={{
-                  width: gap, height: 2, background: 'var(--border)',
-                  position: 'relative', display: 'flex', alignItems: 'center'
+                  width: gap, height: 2, background: hl === 'deleted' ? 'transparent' : 'var(--border)',
+                  borderTop: hl === 'deleted' ? '2px dashed #E05252' : 'none',
+                  opacity: opacity,
+                  position: 'relative', display: 'flex', alignItems: 'center',
+                  marginBottom: node.label ? 20 : 0, // offset arrow if label pushes node up
                 }}>
                   <div style={{
                     position: 'absolute', right: -2, width: 0, height: 0,
                     borderTop: '4px solid transparent',
                     borderBottom: '4px solid transparent',
-                    borderLeft: '6px solid var(--border)'
+                    borderLeft: `6px solid ${hl === 'deleted' ? '#E05252' : 'var(--border)'}`
                   }} />
                 </div>
               )}
@@ -673,16 +925,40 @@ function LinkedListVisualizer({ listData, pointers, prevVars }) {
 // ============================================================
 // TREE VISUALIZER
 // ============================================================
-function TreeVisualizer({ treeData, pointers, prevVars }) {
-  const { name, info } = treeData;
-  const root = info.value;
+// ============================================================
+// TREE VISUALIZER
+// ============================================================
+function TreeVisualizer({ treeData, pointers, prevVars, vars = {} }) {
+  const { name, info, nodes: aiNodes } = treeData;
+  let root = info?.value;
+
+  // Use AI-provided nodes if available
+  if (aiNodes && Array.isArray(aiNodes) && aiNodes.length > 0) {
+    const nodeMap = {};
+    aiNodes.forEach(n => { nodeMap[n.id] = { ...n, left: null, right: null }; });
+    aiNodes.forEach(n => {
+      if (n.left !== null && n.left !== undefined) nodeMap[n.id].left = nodeMap[n.left];
+      if (n.right !== null && n.right !== undefined) nodeMap[n.id].right = nodeMap[n.right];
+    });
+    // Assuming root is the first node or node 0
+    root = nodeMap[0] || nodeMap[aiNodes[0].id];
+  }
 
   if (!root) return null;
 
-  // Simple recursive layout for binary trees
+  // Compute max depth to determine appropriate spacing
+  function getDepth(node) {
+    if (!node) return 0;
+    return 1 + Math.max(getDepth(node.left), getDepth(node.right));
+  }
+  const maxDepth = getDepth(root);
+
+  // Simple recursive layout for binary trees with exponential spacing based on depth
   function computeTreeLayout(node, depth = 0, xOffset = 0) {
     if (!node) return null;
-    const hGap = 60 / (depth + 1);
+    
+    // Exponential horizontal gap prevents overlapping at deeper levels
+    const hGap = Math.max(25, Math.pow(2, Math.max(0, maxDepth - depth - 2)) * 45);
     const left = node.left ? computeTreeLayout(node.left, depth + 1, xOffset - hGap) : null;
     const right = node.right ? computeTreeLayout(node.right, depth + 1, xOffset + hGap) : null;
     
@@ -691,7 +967,8 @@ function TreeVisualizer({ treeData, pointers, prevVars }) {
       x: xOffset,
       y: depth * 60,
       left,
-      right
+      right,
+      rawNode: node
     };
   }
 
@@ -713,22 +990,56 @@ function TreeVisualizer({ treeData, pointers, prevVars }) {
   
   flatten(layout);
 
-  const minX = Math.min(...nodesToRender.map(n => n.x));
-  const maxX = Math.max(...nodesToRender.map(n => n.x));
-  const maxY = Math.max(...nodesToRender.map(n => n.y));
+  const minX = Math.min(...nodesToRender.map(n => n.x), -50);
+  const maxX = Math.max(...nodesToRender.map(n => n.x), 50);
+  const maxY = Math.max(...nodesToRender.map(n => n.y), 50);
   
-  const width = Math.max(300, (maxX - minX) * 2 + 100);
-  const height = maxY + 80;
-  const shiftX = width / 2;
+  // Add margins to width and height
+  const width = (maxX - minX) + 120;
+  const height = maxY + 100;
+  const shiftX = -minX + 60;
+
+  // Helper to check if a variable points to a specific node
+  function getMatchingPointers(node) {
+    if (!node || typeof node !== 'object') return [];
+    const matches = [];
+    for (const [varName, varInfo] of Object.entries(vars)) {
+      if (varName === name) continue; // Skip the root tree variable itself
+      
+      const val = varInfo && varInfo.value !== undefined ? varInfo.value : varInfo;
+      if (val && typeof val === 'object' && !Array.isArray(val)) {
+        if (val.val === node.val) {
+          // Verify left and right child values match or both are null to ensure it's the exact same node
+          const leftMatch = (!val.left && !node.left) || (val.left && node.left && val.left.val === node.left.val);
+          const rightMatch = (!val.right && !node.right) || (val.right && node.right && val.right.val === node.right.val);
+          if (leftMatch && rightMatch) {
+            matches.push(varName);
+          }
+        }
+      }
+    }
+    return matches;
+  }
+
+  const treePointerColors = {
+    root: '#7EB8D4',
+    curr: '#E7C36A',
+    node: '#A78BFA',
+    p: '#D49B84',
+    q: '#8FAF9D',
+    parent: '#9CA3AF'
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+      {/* Header */}
       <div style={{
         fontSize: 11, fontFamily: 'var(--font-mono)',
-        color: 'var(--canvas-text-muted)', marginBottom: 12,
+        color: 'var(--canvas-text-muted)', marginBottom: 16,
         display: 'flex', alignItems: 'center', gap: 6,
       }}>
         <span style={{ color: depthColor(0), fontWeight: 600 }}>{name}</span>
+        <span style={{ opacity: 0.6 }}>[Binary Tree]</span>
         {info.changedThisFrame && (
           <span style={{
             fontSize: 10, padding: '1px 6px', background: 'rgba(231,195,106,0.18)',
@@ -737,28 +1048,135 @@ function TreeVisualizer({ treeData, pointers, prevVars }) {
         )}
       </div>
       
-      <svg width={width} height={height} style={{ overflow: 'visible' }}>
-        {edgesToRender.map((edge, i) => (
-          <line 
-            key={i}
-            x1={edge.x1 * 1.5 + shiftX} y1={edge.y1 + 20}
-            x2={edge.x2 * 1.5 + shiftX} y2={edge.y2 + 20}
-            stroke="var(--border)" strokeWidth={2}
-          />
-        ))}
-        {nodesToRender.map((n, i) => (
-          <g key={i} transform={`translate(${n.x * 1.5 + shiftX}, ${n.y + 20})`}>
-            <circle r={18} fill="var(--bg-card)" stroke="var(--border)" strokeWidth={2} />
-            <text 
-              textAnchor="middle" dy="5"
-              fontSize={12} fontFamily="var(--font-mono)" fontWeight={600}
-              fill="var(--canvas-text-primary)"
-            >
-              {String(n.val).slice(0, 4)}
-            </text>
-          </g>
-        ))}
-      </svg>
+      <div style={{ 
+        position: 'relative', 
+        background: 'var(--bg-canvas)', 
+        border: '1px solid var(--border)', 
+        borderRadius: 12,
+        padding: '20px 10px',
+        overflow: 'auto',
+        maxWidth: '100%'
+      }}>
+        <svg width={width} height={height} style={{ overflow: 'visible' }}>
+          <defs>
+            <filter id="node-shadow" x="-30%" y="-30%" width="160%" height="160%">
+              <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.15" floodColor="var(--canvas-text-primary)" />
+            </filter>
+          </defs>
+
+          {/* Render Connections */}
+          {edgesToRender.map((edge, i) => (
+            <line 
+              key={i}
+              x1={edge.x1 + shiftX} y1={edge.y1 + 24}
+              x2={edge.x2 + shiftX} y2={edge.y2 + 24}
+              stroke="var(--border)" strokeWidth={2.5}
+              strokeLinecap="round"
+              opacity={0.8}
+            />
+          ))}
+
+          {/* Render Nodes */}
+          {nodesToRender.map((n, i) => {
+            const hl = n.rawNode.highlight || 'none';
+            const label = n.rawNode.label || null;
+
+            // Use AI highlight first, then fallback to pointer logic
+            let isPointed = false;
+            let ptrColor = null;
+            if (hl === 'none') {
+              const matchingPointers = getMatchingPointers(n.rawNode);
+              isPointed = matchingPointers.length > 0;
+              const primaryPtr = matchingPointers[0];
+              ptrColor = primaryPtr ? (treePointerColors[primaryPtr] || POINTER_COLORS[i % POINTER_COLORS.length]) : null;
+            }
+
+            let bg = 'var(--bg-card)';
+            let borderColor = 'var(--border)';
+            let textColor = 'var(--canvas-text-primary)';
+            let scale = 1;
+
+            if (hl === 'active') {
+              bg = 'rgba(231,195,106,0.15)'; borderColor = 'var(--accent-amber)'; textColor = '#B08A30'; scale = 1.1;
+            } else if (hl === 'visited') {
+              bg = 'rgba(143,175,157,0.10)'; borderColor = 'rgba(143,175,157,0.6)'; textColor = '#6A9F82';
+            } else if (isPointed) {
+              bg = `${ptrColor}1A`; borderColor = ptrColor;
+            }
+
+            return (
+              <g 
+                key={i} 
+                transform={`translate(${n.x + shiftX}, ${n.y + 24})`}
+                style={{ transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)' }}
+              >
+                {/* Outer highlighting ring if pointed to */}
+                {(isPointed || hl === 'active') && (
+                  <circle 
+                    r={24} 
+                    fill="none" 
+                    stroke={hl === 'active' ? 'var(--accent-amber)' : ptrColor} 
+                    strokeWidth={2} 
+                    strokeDasharray="4,3"
+                    style={{ transformBox: 'fill-box', transformOrigin: 'center' }}
+                  />
+                )}
+
+                {/* Node circle */}
+                <circle 
+                  r={18} 
+                  fill={bg} 
+                  stroke={borderColor} 
+                  strokeWidth={isPointed || hl === 'active' ? 2.5 : 1.5} 
+                  filter="url(#node-shadow)"
+                  style={{ transition: 'all 220ms ease', transform: `scale(${scale})`, transformOrigin: 'center' }}
+                />
+
+                {/* Value */}
+                <text 
+                  x={0} y={4} 
+                  textAnchor="middle" 
+                  fontSize={12} 
+                  fontFamily="var(--font-mono)" 
+                  fontWeight={600}
+                  fill={textColor}
+                  style={{ transition: 'fill 220ms ease', transform: `scale(${scale})`, transformOrigin: 'center' }}
+                >
+                  {String(n.val).slice(0, 3)}
+                </text>
+
+                {/* AI Label */}
+                {label && (
+                  <text
+                    x={0} y={32}
+                    textAnchor="middle"
+                    fontSize={9}
+                    fontFamily="var(--font-mono)"
+                    fontWeight={600}
+                    fill="var(--accent-amber)"
+                  >
+                    {label}
+                  </text>
+                )}
+
+                {/* Pointer Labels (fallback) */}
+                {!label && isPointed && (
+                  <text
+                    x={0} y={32}
+                    textAnchor="middle"
+                    fontSize={9}
+                    fontFamily="var(--font-mono)"
+                    fontWeight={600}
+                    fill={ptrColor}
+                  >
+                    {getMatchingPointers(n.rawNode).join(', ')}
+                  </text>
+                )}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
     </div>
   );
 }

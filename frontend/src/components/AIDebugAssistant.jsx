@@ -25,8 +25,35 @@ export default function AIDebugAssistant() {
   const [expanded, setExpanded] = useState(false);
   const [history, setHistory] = useState([]);
   const [activeTabId, setActiveTabId] = useState(null);
+  const [panelHeight, setPanelHeight] = useState(280);
 
   const activeAnalysis = history.find(h => h.id === activeTabId) || null;
+
+  // Vertical resize for the AI panel
+  const startResize = (e) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startH = expanded ? panelHeight : 48; // if closed, start from 48
+
+    const onMove = (ev) => {
+      const delta = startY - ev.clientY; // drag up = grow
+      const newH = Math.max(48, Math.min(600, startH + delta));
+      if (newH > 80 && !expanded) setExpanded(true);
+      if (newH < 80 && expanded) setExpanded(false);
+      
+      setPanelHeight(Math.max(160, newH)); // keep a minimum panel height when open
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+  };
 
   const runAnalysis = async () => {
 
@@ -221,13 +248,31 @@ export default function AIDebugAssistant() {
     <div style={{
       display: 'flex', flexDirection: 'column',
       borderTop: '1px solid var(--border)', background: 'var(--bg-card)',
-      height: expanded ? '40%' : 'auto',
-      transition: 'height var(--motion-standard)', flexShrink: 0
+      maxHeight: expanded ? panelHeight : 48,
+      minHeight: 48,
+      overflow: 'hidden',
+      flexShrink: 0,
+      position: 'relative',
+      transition: 'max-height 300ms cubic-bezier(0.16, 1, 0.3, 1)',
     }}>
-      {/* ── Header Bar ── */}
+      {/* Resize drag strip — always at the very top */}
+      <div
+        onMouseDown={startResize}
+        title="Drag to resize"
+        style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: 8,
+          cursor: 'row-resize', zIndex: 10,
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+          paddingTop: 3,
+        }}
+      >
+        <div style={{ width: 32, height: 2, borderRadius: 2, background: 'var(--border)', opacity: expanded ? 1 : 0.4 }} />
+      </div>
+
+      {/* ── Header Bar ── always visible at top */}
       <div style={{
-        padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        cursor: 'pointer'
+        padding: '0 16px', height: 48, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        cursor: 'pointer', flexShrink: 0, borderBottom: expanded ? '1px solid var(--border)' : 'none',
       }} onClick={() => setExpanded(!expanded)}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Bot size={16} style={{ color: 'var(--accent-sage)' }} />
@@ -250,32 +295,31 @@ export default function AIDebugAssistant() {
         </div>
       </div>
 
-      {/* ── Expanded Content ── */}
-      {expanded && (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          
-          {/* History Tabs */}
-          {history.length > 0 && (
-            <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', padding: '0 16px', gap: 16 }}>
-              {history.map((h, i) => (
-                <button
-                  key={h.id}
-                  onClick={() => setActiveTabId(h.id)}
-                  style={{
-                    padding: '8px 0', border: 'none', background: 'transparent',
-                    fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                    color: activeTabId === h.id ? 'var(--text-primary)' : 'var(--text-muted)',
-                    borderBottom: activeTabId === h.id ? '2px solid var(--accent-sage)' : '2px solid transparent'
-                  }}
-                >
-                  Analysis {history.length - i}
-                </button>
-              ))}
-            </div>
-          )}
+      {/* ── Expanded Content (overflow hidden handles show/hide) ── */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
+        
+        {/* History Tabs */}
+        {history.length > 0 && (
+          <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', padding: '0 16px', gap: 16, flexShrink: 0 }}>
+            {history.map((h, i) => (
+              <button
+                key={h.id}
+                onClick={() => setActiveTabId(h.id)}
+                style={{
+                  padding: '8px 0', border: 'none', background: 'transparent',
+                  fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                  color: activeTabId === h.id ? 'var(--text-primary)' : 'var(--text-muted)',
+                  borderBottom: activeTabId === h.id ? '2px solid var(--accent-sage)' : '2px solid transparent'
+                }}
+              >
+                Analysis {history.length - i}
+              </button>
+            ))}
+          </div>
+        )}
 
-          {/* Content Area */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+        {/* Content Area */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
             {!activeAnalysis && (
               <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 16px', gap: 16 }}>
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--border)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.8 }}>
@@ -314,11 +358,10 @@ export default function AIDebugAssistant() {
             )}
           </div>
 
-          <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)', fontSize: 10, color: 'var(--text-muted)', textAlign: 'right' }}>
+          <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)', fontSize: 10, color: 'var(--text-muted)', textAlign: 'right', flexShrink: 0 }}>
             Each analysis uses approx. 500 tokens. (Groq Free Tier)
           </div>
         </div>
-      )}
     </div>
   );
 }

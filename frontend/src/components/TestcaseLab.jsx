@@ -66,7 +66,7 @@ export default function TestcaseLab() {
     try {
       const testInput = JSON.stringify([testCase.data]);
       const code = state.code || '';
-      const result = await traceEngine.executeCode(state.language, code, testInput, state.customApiKey, state.judge0ApiKey);
+      const result = await traceEngine.executeCode(state.editorMode, state.language, code, testInput, state.customApiKey, state.judge0ApiKey);
 
       if (result.error && (!result.frames || result.frames.length === 0)) {
         alert('Error: ' + result.error);

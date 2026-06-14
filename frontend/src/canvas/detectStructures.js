@@ -16,10 +16,11 @@ function findMainArray(variables) {
   let best = null;
   let bestLen = -1;
   for (const [name, info] of Object.entries(variables)) {
-    if (!Array.isArray(info.value)) continue;
+    const val = info && info.value !== undefined ? info.value : info;
+    if (!Array.isArray(val)) continue;
     // Prefer names that sound like main input arrays
     const isMain = /^(nums|arr|array|a|s|list|data|input|grid|matrix|board)$/.test(name);
-    const len = info.value.length;
+    const len = val.length;
     if (len > bestLen || (isMain && len >= bestLen)) {
       best = name;
       bestLen = len;
@@ -78,12 +79,15 @@ export function detectStructures(frame) {
         arrays.push({ name, info: { ...info, value: effectiveVal }, is2D });
       }
     } else if (isObject(effectiveVal)) {
-      // Check for Linked List (has 'next')
-      if ('next' in effectiveVal || (effectiveVal.__class__ && effectiveVal.__class__.toLowerCase().includes('listnode'))) {
+      const isAiTree = frame?.dataStructureState?.type === 'binary_tree';
+      const isAiList = frame?.dataStructureState?.type === 'linked_list';
+
+      // Check for Linked List (has 'next' or AI says it's a list)
+      if ('next' in effectiveVal || (effectiveVal.__class__ && effectiveVal.__class__.toLowerCase().includes('listnode')) || (info.type && info.type.toLowerCase().includes('listnode')) || (isAiList && 'val' in effectiveVal && Object.keys(effectiveVal).length <= 3)) {
         linkedLists.push({ name, info: { ...info, value: effectiveVal } });
       } 
-      // Check for Tree (has 'left' and 'right' or 'children')
-      else if (('left' in effectiveVal && 'right' in effectiveVal) || 'children' in effectiveVal || (effectiveVal.__class__ && effectiveVal.__class__.toLowerCase().includes('treenode'))) {
+      // Check for Tree (has 'left' or 'right' or AI says it's a tree)
+      else if (('left' in effectiveVal || 'right' in effectiveVal || 'children' in effectiveVal) || (effectiveVal.__class__ && effectiveVal.__class__.toLowerCase().includes('treenode')) || (info.type && info.type.toLowerCase().includes('treenode')) || (isAiTree && 'val' in effectiveVal && Object.keys(effectiveVal).length <= 3) || ('val' in effectiveVal && Object.keys(effectiveVal).length === 1)) {
         trees.push({ name, info: { ...info, value: effectiveVal } });
       }
       // Check for Adjacency List Graph (dict/hashmap where values are arrays)

@@ -153,12 +153,38 @@ function LeftPanel({ isOpen, onToggle, activeLine }) {
   const [activeTab, setActiveTab] = React.useState('code');
   const { state, update } = useApp();
   const codeChanged = state.code !== state.lastExecutedCode && state.lastExecutedCode !== '';
+  
+  const [width, setWidth] = React.useState(400);
+
+  const startDrag = (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = width;
+
+    const onMove = (ev) => {
+      const delta = ev.clientX - startX;
+      const newW = Math.max(280, Math.min(800, startW + delta));
+      setWidth(newW);
+    };
+
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = 'default';
+      document.body.style.userSelect = 'auto';
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
 
   return (
     <div style={{
       position: 'absolute', top: 0, bottom: 0, left: 0,
-      width: 400, zIndex: 30, display: 'flex', flexDirection: 'column',
-      transform: isOpen ? 'translateX(0)' : 'translateX(-400px)',
+      width: width, zIndex: 30, display: 'flex', flexDirection: 'column',
+      transform: isOpen ? 'translateX(0)' : `translateX(-${width}px)`,
       transition: 'transform 400ms cubic-bezier(0.16, 1, 0.3, 1)',
     }}>
       <div style={{
@@ -252,12 +278,16 @@ function LeftPanel({ isOpen, onToggle, activeLine }) {
               <div style={{ height: 1, background: 'var(--border)', margin: '0 16px 16px' }} />
               <BugsPanel />
               <ProblemCard />
-              <AIDebugAssistant />
             </>
           )}
           {activeTab === 'testcases' && <TestcaseLab />}
           {activeTab === 'diff' && <DiffDebugger />}
         </div>
+
+        {/* FIXED AI Debug Assistant at bottom */}
+        {activeTab === 'code' && (
+          <AIDebugAssistant />
+        )}
       </div>
 
       {/* Toggle button */}
@@ -280,6 +310,17 @@ function LeftPanel({ isOpen, onToggle, activeLine }) {
           CODE
         </span>
       </button>
+
+      {/* Resize Handle */}
+      {isOpen && (
+        <div
+          onMouseDown={startDrag}
+          style={{
+            position: 'absolute', top: 0, bottom: 0, right: -4,
+            width: 8, cursor: 'col-resize', zIndex: 40,
+          }}
+        />
+      )}
     </div>
   );
 }

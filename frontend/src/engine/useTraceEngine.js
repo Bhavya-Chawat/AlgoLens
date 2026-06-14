@@ -129,55 +129,26 @@ export function useTraceEngine() {
   // Sends code + testInput to the worker and returns the parsed
   // { frames, bugs, error, result } object.
   const executeCode = useCallback(async (editorMode, language, code, testInput, apiKey, judge0ApiKey) => {
-    if (language === 'python') {
-      if (!workerRef.current) throw new Error('Engine not initialised. Call initEngine() first.');
-      if (engineStatus !== 'ready') throw new Error('Engine is not ready yet.');
-
-      setEngineStatus('executing');
-      setError(null);
-
-      try {
-        const jsonStr = await sendMsg(
-          'EXECUTE',
-          { editorMode, code, testInput },
-          10000, // 10 second timeout per execution
-        );
-
-        const result = JSON.parse(jsonStr);
-
-        if (result.error && result.frames.length === 0) {
-          throw new Error(result.error);
-        }
-        return result;
-      } catch (err) {
-        setError(err.message);
-        throw err;
-      } finally {
-        setEngineStatus('ready');
+    setEngineStatus('executing');
+    setError(null);
+    try {
+      const res = await fetch('http://localhost:3000/api/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ editorMode, language, code, testInput: JSON.parse(testInput || '[]'), apiKey, judge0ApiKey })
+      });
+      const result = await res.json();
+      if (result.error) {
+        throw new Error(result.error);
       }
-    } else {
-      // Backend Execution for Java, C++, JS
-      setEngineStatus('executing');
-      setError(null);
-      try {
-        const res = await fetch('http://localhost:3000/api/execute', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ editorMode, language, code, testInput: JSON.parse(testInput || '[]'), apiKey, judge0ApiKey })
-        });
-        const result = await res.json();
-        if (result.error) {
-          throw new Error(result.error);
-        }
-        return result;
-      } catch (err) {
-        setError(err.message);
-        throw err;
-      } finally {
-        setEngineStatus('ready');
-      }
+      return result;
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setEngineStatus('ready');
     }
-  }, [engineStatus, sendMsg]);
+  }, [engineStatus]);
 
   // ── resetEngine ───────────────────────────────────────────
   // Terminates the crashed worker and resets state.

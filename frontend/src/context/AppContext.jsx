@@ -41,6 +41,7 @@ const INITIAL_STATE = {
   globalLoadingText: '',
   executionTrace: [],
   currentFrame: 0,
+  executionResult: null,
   isPlaying: false,
   playbackSpeed: 1,
   detectedBugs: [],

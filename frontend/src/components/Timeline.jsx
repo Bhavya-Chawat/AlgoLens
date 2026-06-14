@@ -45,9 +45,35 @@ const Timeline = React.memo(function Timeline({
   const [hoverFrame, setHoverFrame] = useState(null);
   const [jumpInput, setJumpInput] = useState('');
   const [scrollLeft, setScrollLeft] = useState(0);
+  const [rightWidth, setRightWidth] = useState(200);
+  const [centerVisible, setCenterVisible] = useState(true);
   
   const trackRef = useRef(null);
   const containerRef = useRef(null);
+
+  // Resize right panel — drag its left border leftward to grow it
+  const startRightResize = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startW = rightWidth;
+    const onMove = (ev) => {
+      const delta = startX - ev.clientX; // drag left = grow
+      const newW = Math.max(140, Math.min(360, startW + delta));
+      setRightWidth(newW);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
+
 
   // Keyboard shortcuts moved to VisualizerView
 
@@ -415,48 +441,69 @@ const Timeline = React.memo(function Timeline({
         )}
       </div>
 
-      {/* ── SECTION 3: FRAME INFO & SETTINGS (~180px) ── */}
+      {/* ── SECTION 3: FRAME INFO & SETTINGS (resizable) ── */}
       <div style={{
-        width: 200, padding: '16px 20px',
+        width: rightWidth, padding: '12px 16px',
         borderLeft: '1px solid var(--border)', flexShrink: 0,
         display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+        position: 'relative', overflow: 'hidden',
       }}>
-        {/* Frame Number */}
-        <div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-            <span style={{ fontSize: 18, fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+        {/* Resize handle on left edge */}
+        <div
+          onMouseDown={startRightResize}
+          style={{
+            position: 'absolute', top: 0, left: 0, bottom: 0, width: 5,
+            cursor: 'col-resize', zIndex: 10,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <div style={{ width: 1, height: 24, background: 'var(--border)', borderRadius: 1 }} />
+        </div>
+
+        {/* Frame Number + Description */}
+        <div style={{ paddingLeft: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 2 }}>
+            <span style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', lineHeight: 1 }}>
               {currentFrame}
             </span>
-            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              of {total - 1} total
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+              / {total - 1}
             </span>
           </div>
           <div style={{
-            fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)',
-            marginTop: 4, lineHeight: 1.4,
-            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+            fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)',
+            fontWeight: 600, lineHeight: 1.5, marginTop: 4,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>
-            {currentFrameObj?.description || '–'}
+            {currentFrameObj?.codeWithValues || currentFrameObj?.description?.replace(/[\{\}\;]+$/g, '').replace(/^[\{\}\s]+/g, '').trim() || '–'}
           </div>
+          {currentFrameObj?.explanation && (
+            <div style={{
+              fontSize: 10, fontFamily: 'var(--font-sans)', color: 'var(--text-secondary)',
+              lineHeight: 1.3, marginTop: 2,
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+            }}>
+              {currentFrameObj.explanation}
+            </div>
+          )}
         </div>
 
-        {/* Quick Jumps & Input */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {/* Quick Jumps */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingLeft: 6 }}>
           <form onSubmit={handleJumpSubmit} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Go to:</span>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', fontFamily: 'var(--font-mono)' }}>Go to:</span>
             <input
               type="text"
               value={jumpInput}
               onChange={e => setJumpInput(e.target.value)}
               placeholder="0"
               style={{
-                width: 40, padding: '2px 4px', fontSize: 11, fontFamily: 'var(--font-mono)',
+                width: 44, padding: '3px 6px', fontSize: 11, fontFamily: 'var(--font-mono)',
                 background: 'var(--bg-canvas)', border: '1px solid var(--border)', borderRadius: 4,
                 color: 'var(--text-primary)', outline: 'none',
               }}
             />
           </form>
-
           <div style={{ display: 'flex', gap: 6 }}>
             <QuickJumpBtn icon={<AlertTriangle size={10} />} label="First Bug" onClick={jumpToFirstBug} disabled={!detectedBugs.length} />
             <QuickJumpBtn icon={<CornerDownLeft size={10} />} label="Last Return" onClick={jumpToLastReturn} />

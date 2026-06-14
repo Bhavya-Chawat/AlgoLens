@@ -143,21 +143,25 @@ body {
   transition: background var(--motion-expand), color var(--motion-expand);
 }
 
-/* ---- SCROLLBARS ---- */
+/* ---- SCROLLBARS — completely invisible, scroll still works ---- */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
+  width: 0px;
+  height: 0px;
   background: transparent;
+  display: none;
 }
-::-webkit-scrollbar-thumb {
-  background: var(--border-hover);
-  border-radius: 3px;
+/* Firefox */
+* {
+  scrollbar-width: none;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+
+/* ---- CONSOLE OUTPUT — ensure scrollability ---- */
+.console-output-content {
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
+
+
 
 /* ---- REDUCED MOTION ---- */
 @media (prefers-reduced-motion: reduce) {

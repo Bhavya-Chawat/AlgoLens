@@ -602,13 +602,14 @@ function ConsoleOutput({ result, error, onClose }) {
   return (
     <div className="animate-fade-in-up" style={{
       marginTop: 12, padding: 0, background: 'var(--bg-canvas)',
-      border: '1px solid var(--border)', borderRadius: 8,
+      border: '1px solid var(--border)', borderRadius: 10,
       display: 'flex', flexDirection: 'column',
-      maxHeight: 200, overflow: 'hidden'
+      maxHeight: 240, overflow: 'hidden', flexShrink: 0,
     }}>
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '8px 12px', borderBottom: '1px solid var(--border)', background: 'var(--bg-card)'
+        padding: '8px 14px', borderBottom: '1px solid var(--border)', background: 'var(--bg-card)',
+        flexShrink: 0,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
@@ -617,15 +618,16 @@ function ConsoleOutput({ result, error, onClose }) {
           {error && <span style={{ padding: '2px 6px', background: 'rgba(224,82,82,0.1)', color: '#E05252', borderRadius: 4, fontSize: 10, fontWeight: 600 }}>Error</span>}
           {result && !error && <span style={{ padding: '2px 6px', background: 'rgba(16,185,129,0.1)', color: '#10B981', borderRadius: 4, fontSize: 10, fontWeight: 600 }}>Success</span>}
         </div>
-        <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+        <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4 }}>
           <X size={14} />
         </button>
       </div>
-      <div style={{
-        padding: '12px', overflowY: 'auto',
-        fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.5,
+      <div className="console-output-content" style={{
+        padding: '12px 14px',
+        fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.6,
         color: error ? '#E05252' : 'var(--text-primary)',
-        whiteSpace: 'pre-wrap'
+        whiteSpace: 'pre-wrap', flex: 1,
+        overflowY: 'auto',
       }}>
         {error ? error : result}
       </div>
@@ -702,12 +704,41 @@ export default function EditorView() {
         currentFrame:   0,
         detectedBugs:   result.bugs || [],
         lastExecutedCode: code,
+        executionResult: result.result,
       });
     } catch (err) {
       setRunError(err.message || 'Execution failed.');
       update({ isRunning: false, globalLoading: false });
     }
   }, [engineStatus, isReady, initEngine, executeCode, state, update]);
+  // Resizing Logic
+  const [leftWidth, setLeftWidth] = React.useState(65);
+
+  const startDrag = (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = leftWidth;
+    const totalWidth = window.innerWidth;
+
+    const onMove = (ev) => {
+      const deltaPx = ev.clientX - startX;
+      const deltaPct = (deltaPx / totalWidth) * 100;
+      const newW = Math.max(30, Math.min(80, startW + deltaPct)); // Min 30%, Max 80%
+      setLeftWidth(newW);
+    };
+
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = 'default';
+      document.body.style.userSelect = 'auto';
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
 
   return (
     <div style={{
@@ -720,13 +751,12 @@ export default function EditorView() {
       <div style={{
         flex: 1, minHeight: 0,
         display: 'flex',
-        gap: 20,
         padding: 20,
         overflow: 'hidden',
       }}>
-        {/* ── Left: Code Editor (65%) ── */}
+        {/* ── Left: Code Editor ── */}
         <div style={{
-          flex: '0 0 65%', display: 'flex', flexDirection: 'column',
+          flex: `0 0 calc(${leftWidth}% - 10px)`, display: 'flex', flexDirection: 'column',
           gap: 12, minHeight: 0,
         }}>
           <CodeEditor mode="edit" style={{ flex: 1 }} />
@@ -756,9 +786,22 @@ export default function EditorView() {
           </div>
         </div>
 
-        {/* ── Right: Config column (35%) ── */}
+        {/* ── Resize Handle ── */}
+        <div
+          onMouseDown={startDrag}
+          style={{
+            flex: '0 0 20px',
+            cursor: 'col-resize',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 10,
+          }}
+        >
+          <div style={{ width: 4, height: 32, background: 'var(--border)', borderRadius: 4 }} />
+        </div>
+
+        {/* ── Right: Config column ── */}
         <div style={{
-          flex: '0 0 calc(35% - 20px)',
+          flex: `0 0 calc(${100 - leftWidth}% - 10px)`,
           display: 'flex', flexDirection: 'column',
           gap: 14, overflowY: 'auto',
         }}>

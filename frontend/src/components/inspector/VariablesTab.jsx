@@ -34,6 +34,8 @@ const TYPE_COLORS = {
   set:     { bg: 'rgba(126,184,212,0.18)', text: '#1E6480' },
   tuple:   { bg: 'rgba(231,195,106,0.18)', text: '#B08A30' },
   NoneType:{ bg: 'rgba(156,163,175,0.18)', text: '#6B7280' },
+  TreeNode:{ bg: 'rgba(16,185,129,0.18)', text: '#059669' },
+  ListNode:{ bg: 'rgba(16,185,129,0.18)', text: '#059669' },
 };
 
 function TypeBadge({ type }) {
@@ -140,8 +142,13 @@ const VariableRow = React.memo(function VariableRow({ name, info, currentFrame, 
         </button>
       );
     }
-    if (info.type === 'dict') {
+    if (info.type === 'dict' || info.type === 'TreeNode' || info.type === 'ListNode') {
       const keys = info.value ? Object.keys(info.value) : [];
+      let label = `{${keys.length} keys}`;
+      if (info.type === 'TreeNode' || info.type === 'ListNode') {
+        const valStr = info.value && info.value.val !== undefined ? info.value.val : '?';
+        label = `${info.type}(${valStr})`;
+      }
       return (
         <button
           onClick={() => setExpandedPreview(!expandedPreview)}
@@ -151,7 +158,7 @@ const VariableRow = React.memo(function VariableRow({ name, info, currentFrame, 
             color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4,
           }}
         >
-          {'{'}{keys.length} keys{'}'}
+          {label}
           {expandedPreview ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         </button>
       );
@@ -189,7 +196,7 @@ const VariableRow = React.memo(function VariableRow({ name, info, currentFrame, 
         </div>
       );
     }
-    if (info.type === 'dict') {
+    if (info.type === 'dict' || info.type === 'TreeNode' || info.type === 'ListNode') {
       const entries = info.value ? Object.entries(info.value) : [];
       return (
         <div style={{

@@ -106,5 +106,10 @@ ${summary.suspiciousPatterns.join('\n')}
 
 Maximum recursion depth: ${summary.callStackMaxDepth}
 
-Provide your analysis. Remember, if the user's logic perfectly solves the problem, say "Looks good!" and validate it. Otherwise, provide a slight hint.`;
+Provide a short, concise analysis (max 3-4 sentences). 
+CRITICAL RULES FOR ACCURACY:
+1. Code Correctness: If the code logic is correct and will pass on LeetCode, state clearly: "Looks good! The code is correct and should pass on LeetCode." Do not invent bugs or hallucinate issues.
+2. Efficiency: If the code is correct but inefficient in time or space complexity, briefly comment on how to optimize it (e.g., using a HashSet instead of an Array).
+3. Wrong Answers (Subtle Hints): If the code runs but gives a wrong answer or fails edge cases, provide a *subtle hint* stating what might be going wrong. Do NOT provide the exact fix or corrected code immediately. Guide the user to find the bug themselves.
+4. No Premature Warnings: Do not flag non-standard variable names, uninitialized strings, or non-linear loop bounds as errors unless they specifically break the algorithm. Keep the hints brief, concise, and highly actionable.`;
 }

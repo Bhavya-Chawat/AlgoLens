@@ -73,20 +73,20 @@ function BugBanner({ bugs, currentFrame, onJumpToBug }) {
 // ============================================================
 // CANVAS CONTROLS OVERLAY
 // ============================================================
-function CanvasControls({ currentFrame, totalFrames, description, onStep }) {
+function CanvasControls({ currentFrame, totalFrames, description, frame, vars, onStep }) {
   const pct = totalFrames > 1 ? (currentFrame / (totalFrames - 1)) * 100 : 0;
 
   return (
     <div style={{
-      position: 'absolute', bottom: 40, left: '50%',
+      position: 'absolute', bottom: 44, left: '50%',
       transform: 'translateX(-50%)',
-      display: 'flex', alignItems: 'center', gap: 8,
-      padding: '8px 16px',
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: '10px 20px',
       background: 'var(--glass-bg)',
       backdropFilter: 'blur(14px)',
       WebkitBackdropFilter: 'blur(14px)',
       border: '1px solid var(--border)',
-      borderRadius: 24,
+      borderRadius: 28,
       boxShadow: 'var(--shadow-panel)',
       zIndex: 20,
       maxWidth: 'calc(100% - 80px)',
@@ -98,7 +98,7 @@ function CanvasControls({ currentFrame, totalFrames, description, onStep }) {
         disabled={currentFrame <= 0}
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          width: 28, height: 28, borderRadius: 8,
+          width: 32, height: 32, borderRadius: 10,
           border: '1px solid var(--border)',
           background: 'transparent',
           color: currentFrame <= 0 ? 'var(--text-muted)' : 'var(--text-secondary)',
@@ -109,31 +109,82 @@ function CanvasControls({ currentFrame, totalFrames, description, onStep }) {
         onMouseEnter={(e) => { if (currentFrame > 0) e.currentTarget.style.background = 'var(--border)'; }}
         onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
       >
-        <ChevronLeft size={14} />
+        <ChevronLeft size={16} />
       </button>
 
       {/* Frame description */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 6,
-        minWidth: 0, maxWidth: 360,
+        display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+        minWidth: 0, maxWidth: 520,
       }}>
-        <span style={{
-          fontSize: 10, fontFamily: 'var(--font-mono)',
-          color: 'var(--text-muted)', flexShrink: 0,
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          width: '100%',
         }}>
-          {currentFrame + 1}/{totalFrames}
-        </span>
-        <span style={{
-          width: 1, height: 12, background: 'var(--border)',
-          flexShrink: 0,
-        }} />
-        <span style={{
-          fontSize: 11, fontFamily: 'var(--font-mono)',
-          color: 'var(--text-secondary)',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>
-          {description || '–'}
-        </span>
+          <span style={{
+            fontSize: 11, fontFamily: 'var(--font-mono)',
+            color: 'var(--text-muted)', flexShrink: 0,
+          }}>
+            {currentFrame + 1}/{totalFrames}
+          </span>
+          <span style={{
+            width: 1, height: 14, background: 'var(--border)',
+            flexShrink: 0,
+          }} />
+          <span style={{
+            fontSize: 14, fontFamily: 'var(--font-mono)',
+            color: 'var(--text-primary)', fontWeight: 600,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {frame?.codeWithValues || description || '–'}
+          </span>
+        </div>
+        
+        {/* Secondary plain English explanation */}
+        {frame?.explanation && (
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4, fontFamily: 'var(--font-sans)' }}>
+            {frame.explanation}
+          </div>
+        )}
+        
+        {/* Variable values inline — only show changed vars */}
+        {description && Object.keys(vars || {}).length > 0 && !description.startsWith('Line ') && (() => {
+          // Collect scalar vars that actually appear in the description
+          const tokens = [];
+          Object.entries(vars).forEach(([name, info]) => {
+            const val = info && info.value !== undefined ? info.value : info;
+            const type = info?.type || '';
+            const isScalar = ['int', 'float', 'bool', 'str', 'char', 'string'].includes(type) || typeof val === 'number' || typeof val === 'boolean';
+            if (isScalar && name && /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name)) {
+              // Only show if the var name appears in the description
+              const regex = new RegExp(`\\b${name}\\b`);
+              if (regex.test(description)) {
+                tokens.push({ name, val: String(val).slice(0, 12), changed: info?.changedThisFrame });
+              }
+            }
+          });
+          if (!tokens.length) return null;
+          return (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap',
+            }}>
+              <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>where</span>
+              {tokens.map(({ name, val, changed }) => (
+                <span key={name} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 3,
+                  padding: '1px 8px', borderRadius: 12,
+                  background: changed ? 'rgba(231,195,106,0.15)' : 'rgba(126,184,212,0.12)',
+                  border: `1px solid ${changed ? 'rgba(231,195,106,0.4)' : 'rgba(126,184,212,0.3)'}`,
+                  fontSize: 11, fontFamily: 'var(--font-mono)',
+                }}>
+                  <span style={{ color: 'var(--text-muted)' }}>{name}</span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: 9 }}>=</span>
+                  <span style={{ color: changed ? '#B08A30' : '#5BA4C8', fontWeight: 700 }}>{val}</span>
+                </span>
+              ))}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Step forward */}
@@ -143,7 +194,7 @@ function CanvasControls({ currentFrame, totalFrames, description, onStep }) {
         disabled={currentFrame >= totalFrames - 1}
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          width: 28, height: 28, borderRadius: 8,
+          width: 32, height: 32, borderRadius: 10,
           border: '1px solid var(--border)',
           background: 'transparent',
           color: currentFrame >= totalFrames - 1 ? 'var(--text-muted)' : 'var(--text-secondary)',
@@ -154,7 +205,7 @@ function CanvasControls({ currentFrame, totalFrames, description, onStep }) {
         onMouseEnter={(e) => { if (currentFrame < totalFrames - 1) e.currentTarget.style.background = 'var(--border)'; }}
         onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
       >
-        <ChevronRight size={14} />
+        <ChevronRight size={16} />
       </button>
     </div>
   );
@@ -252,17 +303,116 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
     return () => window.removeEventListener('keydown', handler);
   }, [handleStep, state.view]);
 
+  // ── Accumulate missing structures (in case trace drops them) ─
+  const cumulativeVars = useMemo(() => {
+    if (!executionTrace || !executionTrace.length) return {};
+    const structs = {};
+    for (let i = 0; i <= currentFrame; i++) {
+      const f = executionTrace[i];
+      if (f && f.variables) {
+        Object.entries(f.variables).forEach(([k, info]) => {
+          const val = info && info.value !== undefined ? info.value : info;
+          // Only accumulate Arrays and Objects (HashMaps, Trees, etc.)
+          if (Array.isArray(val) || (val !== null && typeof val === 'object')) {
+            structs[k] = info;
+          }
+        });
+      }
+    }
+    return structs;
+  }, [executionTrace, currentFrame]);
+
   // ── Detect structures ──────────────────────────────────────
-  const detected = useMemo(() => detectStructures(frame), [frame]);
+  const detected = useMemo(() => {
+    // 1. Base layer: intelligently auto-detect from all variable shapes
+    const mergedFrame = {
+      ...frame,
+      variables: {
+        ...cumulativeVars,
+        ...(frame?.variables || {})
+      }
+    };
+    const autoDetected = detectStructures(mergedFrame);
+
+    // 2. Overlay layer: apply rich AI formatting (highlights, windows, bitwise, pointers)
+    if (frame && frame.dataStructureState) {
+      const ds = frame.dataStructureState;
+      
+      // Merge pointers and bits
+      autoDetected.pointers = ds.pointers || autoDetected.pointers || {};
+      autoDetected.bits = ds.bits || autoDetected.bits || null;
+      
+      if (ds.type === 'bitwise') {
+        autoDetected.type = 'bitwise';
+      }
+      
+      if (ds.name) {
+        if (ds.type === 'array' || ds.type === 'sliding_window') {
+          const arr = autoDetected.arrays?.find(a => a.name === ds.name);
+          if (arr) { arr.window = ds.window; arr.highlights = ds.highlights; }
+          if (autoDetected.mainArray && autoDetected.mainArray.name === ds.name) {
+            autoDetected.mainArray.window = ds.window;
+            autoDetected.mainArray.highlights = ds.highlights;
+          }
+        } else if (ds.type === 'binary_tree') {
+          const tree = autoDetected.trees?.find(t => t.name === ds.name);
+          if (tree) tree.nodes = ds.nodes;
+          // If autoDetected didn't find the tree (e.g., missing left/right initially), force it
+          if (!tree && ds.nodes) {
+             if (!autoDetected.trees) autoDetected.trees = [];
+             autoDetected.trees.push({ name: ds.name, info: frame.variables?.[ds.name] || {value: null}, nodes: ds.nodes });
+          }
+        } else if (ds.type === 'linked_list') {
+          const ll = autoDetected.linkedLists?.find(l => l.name === ds.name);
+          if (ll) ll.nodes = ds.nodes;
+        }
+        
+        // Upgrade type if autoDetected missed the primary structure
+        if (autoDetected.type === 'generic' && ds.type && ds.type !== 'generic') {
+          autoDetected.type = ds.type;
+        }
+      }
+    }
+
+    return autoDetected;
+  }, [frame, cumulativeVars]);
+
+  // Helper to guess main var if AI doesn't provide it
+  function findMainVar(vars, expectedType) {
+    if (!vars) return null;
+    const keys = Object.keys(vars);
+    if (keys.length === 0) return null;
+    return keys.find(k => vars[k].type?.includes('list') || vars[k].type?.includes('dict')) || keys[0];
+  }
 
   // ── Build recursion tree (memo on frame index) ─────────────
   const callTree = useMemo(() => {
-    if (detected.type !== 'recursion') return null;
-    const { nodes, roots } = buildCallTree(executionTrace, currentFrame);
-    if (!nodes.length) return null;
-    const dims = layoutTree(nodes, roots);
-    return { nodes, roots, dims };
-  }, [detected.type, executionTrace, currentFrame]);
+    // 1. Try AI-provided recursion tree first
+    if (frame && frame.recursionTree && frame.recursionTree.nodes && frame.recursionTree.nodes.length > 0) {
+      const nodes = frame.recursionTree.nodes.map(n => ({
+        ...n,
+        isActive: n.status === 'active',
+        done: n.status === 'done',
+        children: frame.recursionTree.nodes.filter(child => child.parentId === n.id).map(c => c.id)
+      }));
+      const roots = nodes.filter(n => n.parentId === null);
+      if (nodes.length > 0) {
+        const dims = layoutTree(nodes, roots);
+        return { nodes, roots, dims };
+      }
+    }
+    
+    // 2. Fallback to heuristic buildCallTree from execution trace
+    if (detected.type === 'recursion' || (detected.trees && detected.trees.length > 0)) {
+       const { nodes, roots } = buildCallTree(executionTrace, currentFrame);
+       if (nodes && nodes.length > 0) {
+         const dims = layoutTree(nodes, roots);
+         return { nodes, roots, dims };
+       }
+    }
+    
+    return null;
+  }, [frame, detected.type, executionTrace, currentFrame]);
 
   const prevVars = prevF?.variables ?? {};
 
@@ -356,6 +506,8 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
         </button>
       </div>
 
+
+
       {/* Bug banner */}
       {(detectedBugs.length > 0 || isBugFrame) && (
         <BugBanner
@@ -389,27 +541,78 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
             minWidth: 'max-content',
             willChange: 'transform',
           }}
-        >        {/* ── EVENT TYPE BADGE ── */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
+        >{/* ── BADGES: Event / Algo / DS ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
           <EventBadge type={frame.eventType} />
           <span style={{
-            fontSize: 12, fontFamily: 'var(--font-mono)',
-            color: 'var(--canvas-text-muted)',
+            fontSize: 11, fontFamily: 'var(--font-mono)',
+            color: 'var(--canvas-text-muted)', padding: '2px 6px',
           }}>
             line {frame.line}
           </span>
-          {state.detectedAlgorithm && (
+
+          {/* Execution Result inline badge — shows only when a return value is present */}
+          {state.executionResult !== undefined && state.executionResult !== null && (
             <div style={{
               display: 'flex', alignItems: 'center', gap: 6,
-              background: 'var(--bg-canvas)', border: '1px solid var(--accent-sage)',
-              padding: '2px 8px', borderRadius: 12, marginLeft: 16
+              background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.4)',
+              padding: '2px 10px', borderRadius: 20, marginLeft: 4,
             }}>
-              <Activity size={12} style={{ color: 'var(--accent-sage)' }} />
-              <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--accent-sage)', fontWeight: 600 }}>
-                {state.detectedAlgorithm}
+              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: '#10B981', fontWeight: 700, letterSpacing: '0.08em' }}>
+                RETURN
+              </span>
+              <div style={{ width: 1, height: 12, background: 'rgba(16,185,129,0.4)' }} />
+              <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#10B981', fontWeight: 700 }}>
+                {String(state.executionResult)}
               </span>
             </div>
           )}
+
+          {/* Data Structure badge — shown immediately from detected type */}
+          {detected.type && detected.type !== 'generic' && detected.type !== 'empty' && (() => {
+            const DS_LABELS = {
+              stack_queue: 'Stack / Queue',
+              array: 'Array',
+              array_hashmap: 'Array + HashMap',
+              hashmap: 'HashMap',
+              linked_list: 'Linked List',
+              tree: 'Binary Tree',
+              graph: 'Graph',
+              recursion: 'Recursion',
+            };
+            const label = DS_LABELS[detected.type] || detected.type.replace(/_/g, ' ');
+            return (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                background: 'rgba(126,184,212,0.12)', border: '1px solid rgba(126,184,212,0.4)',
+                padding: '3px 10px', borderRadius: 20,
+              }}>
+                <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: '#5BA4C8', fontWeight: 700, letterSpacing: '0.04em' }}>
+                  DS: {label.toUpperCase()}
+                </span>
+              </div>
+            );
+          })()}
+
+          {/* Algorithm badge — shown only after AI hint fills it in */}
+          {state.detectedAlgorithm && (() => {
+            // Ensure we don't show a DS as an algo name (AI hint may confuse them)
+            const dsNames = new Set(['stack', 'queue', 'array', 'hashmap', 'linked list', 'tree', 'graph']);
+            const algoLabel = state.detectedAlgorithm.trim();
+            if (dsNames.has(algoLabel.toLowerCase())) return null;
+            return (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                background: 'rgba(143,175,157,0.12)', border: '1px solid rgba(143,175,157,0.4)',
+                padding: '3px 10px', borderRadius: 20,
+              }}>
+                <Activity size={11} style={{ color: 'var(--accent-sage)' }} />
+                <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--accent-sage)', fontWeight: 700, letterSpacing: '0.04em' }}>
+                  ALGO: {algoLabel.toUpperCase()}
+                </span>
+              </div>
+            );
+          })()}
         </div>
 
         {/* ── RECURSION TREE ── */}
@@ -498,6 +701,7 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
                 treeData={tree}
                 pointers={detected.pointers}
                 prevVars={prevVars}
+                vars={detected.vars}
               />
             ))}
           </Section>
@@ -517,7 +721,39 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
         {/* ── GENERIC BOARD ── */}
         {detected.type === 'generic' && (
           <Section label="Variables">
-            <GenericBoard vars={detected.vars} />
+            <GenericBoard 
+              vars={detected.vars} 
+              isBitwise={
+                state.detectedAlgorithm === 'Bit Manipulation' || 
+                (state.leetcodeProblem?.topicTags || []).some(t => t.name.toLowerCase().includes('bit'))
+              }
+            />
+          </Section>
+        )}
+
+        {/* ── BITWISE VISUALIZER ── */}
+        {detected.type === 'bitwise' && detected.bits && (
+          <Section label="Bitwise Operation">
+             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 16, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8 }}>
+               {Object.entries(detected.bits).map(([name, binaryStr]) => (
+                 <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                   <span style={{ width: 60, fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'right' }}>{name}</span>
+                   <div style={{ display: 'flex', gap: 4 }}>
+                     {binaryStr.split('').map((bit, i) => (
+                       <span key={i} style={{ 
+                         width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                         background: bit === '1' ? 'rgba(16,185,129,0.15)' : 'var(--bg-canvas)',
+                         color: bit === '1' ? '#10B981' : 'var(--text-muted)',
+                         border: `1px solid ${bit === '1' ? 'rgba(16,185,129,0.4)' : 'var(--border)'}`,
+                         borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600
+                       }}>
+                         {bit}
+                       </span>
+                     ))}
+                   </div>
+                 </div>
+               ))}
+             </div>
           </Section>
         )}
 
@@ -534,6 +770,8 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
           currentFrame={currentFrame}
           totalFrames={total}
           description={frame.description}
+          frame={frame}
+          vars={detected.vars}
           onStep={handleStep}
         />
       )}
@@ -615,6 +853,8 @@ const EVENT_BADGE_CONFIG = {
   branch:        { label: 'branch',     bg: 'rgba(212,155,132,0.15)', text: '#8B4A2C', border: 'rgba(212,155,132,0.35)' },
   return:        { label: 'return',     bg: 'rgba(16,185,129,0.12)',  text: '#065F46', border: 'rgba(16,185,129,0.35)' },
   exception:     { label: 'exception',  bg: 'rgba(224,82,82,0.12)',   text: '#9B1C1C', border: 'rgba(224,82,82,0.3)'  },
+  swap:          { label: 'swap',       bg: 'rgba(231,195,106,0.15)', text: '#8C6A14', border: 'rgba(231,195,106,0.35)' },
+  bitwise:       { label: 'bitwise',    bg: 'rgba(126,184,212,0.15)', text: '#1E6480', border: 'rgba(126,184,212,0.35)' },
   line:          { label: 'line',       bg: 'rgba(156,163,175,0.12)', text: '#374151', border: 'rgba(156,163,175,0.3)' },
 };
 
