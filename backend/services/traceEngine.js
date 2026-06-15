@@ -4,7 +4,7 @@ function generateDriver(language, code, testInput) {
   let driver = '';
   let methodName = '';
   const lang = (language || '').toLowerCase();
-  
+
   let argsToPass = [];
   if (Array.isArray(testInput) && testInput.length > 0) {
     const first = testInput[0];
@@ -53,7 +53,7 @@ function generateDriver(language, code, testInput) {
       }
     }
   }
-  
+
   return driver ? code + driver : code;
 }
 
@@ -69,123 +69,93 @@ async function getTrace(editorMode, language, code, testInput, apiKey, judge0Api
   if (!effectiveKey) {
     return { success: false, error: 'No API key available. Set GROQ_API_KEY in .env or provide a custom key.', frames: [] };
   }
-  
+
   const groq = new Groq({ apiKey: effectiveKey });
-  
+
   const runnableCode = generateDriver(language, code, testInput);
 
-  const systemPrompt = `You are a strict code interpreter and visualizer.
-Your task is to mentally execute the user's ${language} code step-by-step on the provided test input and output a detailed JSON trace of the execution.
-Do NOT output any markdown, explanations, or code blocks outside of the JSON. ONLY valid JSON.
+  const systemPrompt = `You are a strict code visualizer. Mentally execute the ${language} code and output a JSON trace. NO markdown outside JSON.
 
 CRITICAL INSTRUCTIONS:
-1. KEY-STEP DEBUGGING: Do NOT output a frame for every single line of code. A human user does not want to click through 50 repetitive steps. Group mundane operations (like a simple condition check + assignment) into a single logical "Key-Step" frame.
-2. SKIP INITIALIZATION: Do NOT output frames for trivial variable declarations or empty data structure initializations (e.g., \`left = 0\`, \`maxLen = 0\`, \`set = new HashSet()\`). Skip straight to the first meaningful step where logic actually begins (e.g., the first iteration of the main loop).
-3. MAXIMUM FRAME LIMIT: You MUST compress the trace to a MAXIMUM of 25 frames for the entire execution. Do NOT end execution in the middle. You MUST reach the final return statement. If an algorithm loops many times, aggressively SKIP the repetitive middle iterations. Only show the most important algorithmic milestones (e.g., window expanding, duplicate found, target matched, base case reached).
-4. Every frame MUST have 'dataStructureState' with a non-generic type if a primary structure exists. Forbidden to use "type": "generic" unless the code literally has no recognizable data structure.
-5. 'codeWithValues' is mandatory every frame. If you grouped multiple lines, put the most important line here (e.g., 'if nums[1] < 9' or 'maxLen = 3').
-5. 'explanation' must be extremely concise (under 10 words) to save tokens (e.g., "nums[1] < target, continuing").
-6. 'variables' must include EVERY variable in scope, not just the ones that changed. Always include the main input array/structure in full so the frontend can render it.
-7. The 'event' field MUST be exactly one of: function_call | loop_iteration | comparison | assignment | return | branch_true | branch_false | swap | recurse | base_case.
-9. TOKEN LIMIT OPTIMIZATION (CRITICAL):
-   - OMIT 'dataStructureState' completely from the frame if it has NOT changed since the previous frame.
-   - OMIT 'recursionTree' completely from the frame if the call stack has NOT changed.
-   - OMIT the full tree/graph object from the 'variables' dictionary. Only include primitives (int, bool, string) and small arrays.
-   - OMIT any variable from 'variables' if its value has NOT changed since the previous frame. Only include variables that changed or are new. The backend will automatically carry them over.
+1. FAST-FORWARD LOOPS (CRITICAL): You MUST NOT trace every single iteration of a loop. Show the first 1-2 iterations, then FAST-FORWARD to the final iterations or a major state change (like a new maximum). Omit the repetitive middle iterations entirely!
+2. KEY-STEP DEBUGGING: Group trivial operations (like 'if' + 'assignment' + 'increment') into ONE single frame. Do NOT output a frame for every single line.
+3. STRICT FRAME LIMIT: The trace MUST NOT exceed 20 frames. If you are approaching 20 frames, aggressively skip to the final result.
+4. 'dataStructureState': MUST use a non-generic type if a primary structure exists. Forbidden to use "type": "generic" if there is a structure.
+5. 'codeWithValues': Mandatory every frame. Show the most important line with variable values (e.g., 'if nums[1] < 9').
+6. 'explanation': Extremely concise (< 10 words).
+7. 'event': MUST be one of function_call | loop_iteration | comparison | assignment | return | branch_true | branch_false | swap | recurse | base_case.
+8. DIFF-ONLY OUTPUT (CRITICAL):
+   - FRAME 0 MUST INCLUDE ALL VARIABLES: You MUST output the full string/array and any sets/maps in 'v' in the very first frame so the frontend can see them!
+   - AFTER FRAME 0, NEVER REPEAT UNCHANGED DATA. The backend deep merges everything!
+   - 'd' (dataStructureState): OMIT entirely if nothing changed. If it changed, output ONLY the specific properties that changed.
+   - For 'd.nd' (nodes) & 'recursionTree.nodes', output ONLY nodes that changed.
+   - 'v' (variables): Output ONLY variables that changed. OMIT unchanged properties within them.
+7. 'returnValue': EXACT primitive only (e.g. "0").
+8. ARRAY AS BINARY TREE: If input is level-order array, root is index 0. Left: 2*i+1, Right: 2*i+2. Do NOT hallucinate nulls.
+9. DATA STRUCTURE TAXONOMY & PRIORITY (CRITICAL): MUST use EXACTLY ONE 'dataStructureState.type'.
+   PRIORITY RULES: Rich visualizers (trees, graphs, windows) ALWAYS override helper structures (maps, sets, queues).
+   [PRIORITY 1 - Topology]:
+   - binary_tree/linked_list: nodes[] array (id, val, next/left/right, highlight, label).
+   - graph: Adjacency list.
+   - trie: nested dictionary, NEVER node arrays.
+   [PRIORITY 2 - Algorithmic]:
+   - sliding_window: MUST use this if the algorithm uses a moving window (e.g. left/right pointers). You MUST output 'w': [left_index, right_index] to draw the box!
+   - two_pointers: Use if algorithm has two independent pointers (e.g. left/right, slow/fast).
+   - interval: 2D array [start, end].
+   [PRIORITY 3 - Arrays/Matrices]:
+   - matrix: 2D grids/boards.
+   - array: 1D arrays/strings.
+   [PRIORITY 4 - Helpers (ONLY use if NO Priority 1-3 structure exists!)]:
+   - hashmap: key-value state.
+   - set: flat array.
+   - stack/queue: array.
+   - priority_queue: ALWAYS flat 0-indexed array, NEVER objects.
+   [OTHER]:
+   - union_find: 'parent' & 'rank' arrays.
+   - segment_tree/fenwick_tree: flat 0-indexed array, NEVER objects.
+   - prefix_sum: cumulative sums array.
+   - monotonic_stack: find next greater/smaller.
+   - bitwise: raw ints.
+   - recursion: implicit call stack.
+   - generic: fallback.
 
-10. CHAIN OF THOUGHT (CRITICAL BUT CONCISE):
-    Write a VERY BRIEF '<scratchpad>' block to trace the state. Do NOT write long sentences in the scratchpad. Keep it to a few words per step to save output tokens.
-    Format:
+10. CHAIN OF THOUGHT (CRITICAL FOR TREES/RECURSION):
+    Write a VERY BRIEF '<scratchpad>' block to trace recursive calls/tree pointers. Keep it to a few words.
     <scratchpad>
-    S1: maxDepth(3)
-    S2: left=maxDepth(9)
+    S1: left=maxDepth(9)
     ...
     </scratchpad>
     \`\`\`json
     { ... }
     \`\`\`
 
-11. RETURN VALUE RULE:
-    The 'returnValue' field in your JSON MUST ONLY contain the exact primitive value (e.g., "0", "1", "[1, 2]", "true"). DO NOT write sentences like "Returning 0 because...".
-
-12. LEETCODE ARRAY REPRESENTATION:
-    If the test input is an array representing a Binary Tree (e.g., [3, 9, 20, null, null, 15, 7]), it is in level-order (BFS). 
-    - The root is at index 0.
-    - The left child of node at index i is at 2*i + 1.
-    - The right child of node at index i is at 2*i + 2.
-    - 'null' means the child doesn't exist. You MUST correctly mentally build this tree before tracing! Do NOT hallucinate nulls. Node 7 in [3,9,20,null,null,15,7] is a VALID node, not null!
-
-13. DATA STRUCTURE TAXONOMY & ENFORCED TYPES (CRITICAL):
-    You MUST output EXACTLY ONE of these types as the primary 'dataStructureState.type'. Include auxiliary data in 'variables'.
-    - array: 1D arrays, strings. Include pointers as integer variables.
-    - matrix: 2D grids, boards.
-    - sliding_window: Include 'window: [left, right]' in pointers if applicable.
-    - two_pointers: Standard array/string but explicitly flagged.
-    - hashmap: Include key-value state.
-    - set: Output contents as a flat array (e.g. ["a", "b", "c"]).
-    - stack: Output as array. Note if monotonic.
-    - queue: Output as array. Note if monotonic.
-    - priority_queue: ALWAYS output as a flat 0-indexed array (heap representation), NEVER as pointer/node objects.
-    - linked_list: Output nodes[] with id, val, next, highlight, label.
-    - binary_tree: Output nodes[] array.
-    - graph: Adjacency list. Include 'directed' and 'weighted' boolean flags in variables if applicable.
-    - trie: ALWAYS output as a nested dictionary, NEVER as node arrays.
-    - union_find: Output 'parent' and 'rank' arrays.
-    - interval: Output as 2D array of [start, end].
-    - segment_tree: ALWAYS output as a flat 0-indexed array. NEVER output as pointer/node objects.
-    - fenwick_tree: Output as flat array (1-indexed but JS arrays are 0-indexed).
-    - prefix_sum: Array used to store cumulative sums.
-    - monotonic_stack: Stack used to find next greater/smaller elements.
-    - bitwise: Output variables as raw integers, the frontend will render the bits.
-    - recursion: Backtracking where state is implicit in call stack.
-    - generic: Fallback.
-
-14. DP METADATA:
-    If a cell in an array/matrix is derived from previous cells (DP), include a 'dp_derivation: [source_index_1, source_index_2]' in the frame if possible.
-
-15. JSON STRING ESCAPING (CRITICAL):
-    Whenever you include code snippets, characters, or string values in 'codeWithValues' or 'explanation', you MUST either use single quotes (e.g. 'a') OR properly escape double quotes (e.g. \\"a\\"). NEVER use unescaped double quotes inside a JSON string value.
+11. JSON ESCAPING: Use single quotes or escape double quotes (\\").
+12. DP METADATA: If DP, include 'dp_derivation: [idx1, idx2]' if possible.
 
 JSON SCHEMA TO FOLLOW EXACTLY:
 {
-  "metadata": {
-    "algorithm": "Name of algorithm used (e.g., Two Pointer, DFS)",
-    "dataStructure": "Main DS used",
-    "timeComplexity": "O(?)",
-    "spaceComplexity": "O(?)"
-  },
+  "metadata": {"algorithm": "Name", "dataStructure": "Main DS", "timeComplexity": "O(?)", "spaceComplexity": "O(?)"},
   "frames": [
     {
-      "line": <line number currently executing>,
+      "line": <number>,
       "event": "<function_call | loop_iteration | comparison | assignment | return | branch_true | branch_false | swap | recurse | base_case>",
-      "codeWithValues": "string showing the code line with variables replaced by values",
-      "explanation": "Human-readable specific explanation of what this line is doing right now",
-      "variables": {
-        "varName": { "type": "int|str|bool|list|dict|TreeNode|ListNode", "value": <actual value or object> }
+      "c": "code with var values",
+      "e": "Human-readable (<10 words)",
+      "v": {
+        "varName": <value/object> // MUST BE VALID JSON! Output sets as arrays. NO raw JS like 'new Set()'.
       },
-      "dataStructureState": {
-        "type": "array|binary_tree|graph|linked_list|stack|queue|hashmap|sliding_window|bitwise|generic",
-        "name": "nums", // Name of the primary variable being visualized
-        
-        // IF ARRAY or SLIDING_WINDOW:
-        "pointers": {"i": 0, "left": 0, "right": 3}, // named indices
-        "window": [0, 3], // start and end index (inclusive) if sliding window
-        "highlights": [0, 3], // indices that changed or are being compared
-        
-        // IF LINKED_LIST or TREE or GRAPH:
-        "nodes": [
-          {"id": 0, "val": 3, "left": 1, "right": 2, "next": 1, "highlight": "active|visited|none", "label": "curr"}
-        ]
+      "d": {
+        "t": "array|binary_tree|graph|linked_list|stack|queue|hashmap|sliding_window|bitwise|generic",
+        "n": "<EXACT_VAR_NAME>", // e.g., "s" or "nums". MUST MATCH the variable name in 'v'!
+        "p": {"i": 0, "left": 0}, "w": [0, 3], "h": [0, 3],
+        "nd": [{"id": 0, "val": 3, "left": 1, "right": 2, "next": 1, "highlight": "active|visited|none", "label": "curr"}]
       },
-      // IF RECURSIVE (MUST include for recursive functions):
       "recursionTree": {
-        "nodes": [
-          {"id": 0, "label": "funcName(args)", "status": "active|waiting|done", "returnValue": "...", "parentId": null}
-        ]
+        "nodes": [{"id": 0, "label": "f()", "status": "active|waiting|done", "returnValue": "...", "parentId": null}]
       }
     }
   ],
-  "result": <final returned value of the function>
+  "result": <final value>
 }
 
 Test Input: ${JSON.stringify(testInput)}
@@ -204,11 +174,15 @@ ${runnableCode}`;
       ],
       model: "llama-3.3-70b-versatile",
       temperature: 0.1,
-      max_tokens: 8192
+      max_tokens: 4000
     });
 
     let responseContent = completion.choices[0]?.message?.content || "{}";
-    
+
+    if (completion.usage) {
+      console.log(`[TraceEngine] Token Usage: Prompt=${completion.usage.prompt_tokens}, Completion=${completion.usage.completion_tokens}, Total=${completion.usage.total_tokens}`);
+    }
+
     // DEBUG: Save raw LLM response to disk
     // Debugging only, file removed for prod safety
 
@@ -230,10 +204,10 @@ ${runnableCode}`;
         }
       }
     }
-    
+
     // Clean up any trailing garbage after the JSON object
     jsonStr = jsonStr.trim();
-    
+
     let result;
     try {
       result = JSON.parse(jsonStr);
@@ -249,39 +223,127 @@ ${runnableCode}`;
         } else {
           throw parseError;
         }
-      } catch(e) {
+      } catch (e) {
         console.error("Failed to parse JSON trace:", parseError, "Raw string was:", jsonStr.substring(0, 100) + "...");
         result = { frames: [], error: "LLM output could not be parsed as valid JSON. It may have exceeded token limits." };
       }
     }
-    
+
     // Add IDs to frames
     if (result.frames && Array.isArray(result.frames)) {
       result.frames.forEach((f, i) => {
+        // Expand shortcodes
+        if (f.c !== undefined) { f.codeWithValues = f.c; delete f.c; }
+        if (f.e !== undefined) { f.explanation = f.e; delete f.e; }
+        if (f.v !== undefined) { f.variables = f.v; delete f.v; }
+        if (f.d !== undefined) {
+          f.dataStructureState = f.d; delete f.d;
+          let d = f.dataStructureState;
+          if (d.t !== undefined) { d.type = d.t; delete d.t; }
+          if (d.n !== undefined) { d.name = d.n; delete d.n; }
+          if (d.p !== undefined) { d.pointers = d.p; delete d.p; }
+          if (d.w !== undefined) { d.window = d.w; delete d.w; }
+          if (d.h !== undefined) { d.highlights = d.h; delete d.h; }
+          if (d.nd !== undefined) { d.nodes = d.nd; delete d.nd; }
+        }
+
         f.id = i;
         if (!f.variables) f.variables = {};
-        
+
+        // Auto-infer variables if they are raw primitives
+        for (const [k, v] of Object.entries(f.variables)) {
+          if (v !== null && typeof v === 'object' && 'value' in v) {
+            continue; // Already formatted
+          }
+          let type = 'generic';
+          if (typeof v === 'number') type = 'int';
+          else if (typeof v === 'boolean') type = 'bool';
+          else if (typeof v === 'string') type = 'str';
+          else if (Array.isArray(v)) type = 'list';
+          else if (v && typeof v === 'object') type = 'dict';
+          f.variables[k] = { type, value: v };
+        }
+
         // Carry over data structures if omitted (token optimization)
         if (i > 0) {
-          if (!f.dataStructureState && result.frames[i-1].dataStructureState) {
-            f.dataStructureState = JSON.parse(JSON.stringify(result.frames[i-1].dataStructureState));
+          if (result.frames[i - 1].dataStructureState) {
+            if (!f.dataStructureState) f.dataStructureState = {};
+            const prevDS = result.frames[i - 1].dataStructureState;
+            for (const key of Object.keys(prevDS)) {
+              if (!(key in f.dataStructureState)) {
+                f.dataStructureState[key] = JSON.parse(JSON.stringify(prevDS[key]));
+              } else if (key === 'pointers' && typeof f.dataStructureState.pointers === 'object' && typeof prevDS.pointers === 'object') {
+                f.dataStructureState.pointers = { ...prevDS.pointers, ...f.dataStructureState.pointers };
+              } else if (key === 'nodes' && Array.isArray(f.dataStructureState.nodes) && Array.isArray(prevDS.nodes)) {
+                const newNodesMap = new Map();
+                f.dataStructureState.nodes.forEach(n => {
+                  if (n && n.id !== undefined) newNodesMap.set(n.id, n);
+                });
+
+                if (newNodesMap.size > 0 && newNodesMap.size === f.dataStructureState.nodes.length) {
+                  const mergedNodes = prevDS.nodes.map(n => {
+                    if (newNodesMap.has(n.id)) {
+                      const updatedNode = newNodesMap.get(n.id);
+                      newNodesMap.delete(n.id);
+                      if (updatedNode._delete) return null;
+                      return { ...n, ...updatedNode };
+                    }
+                    return JSON.parse(JSON.stringify(n));
+                  }).filter(n => n !== null);
+                  newNodesMap.forEach(n => {
+                    if (!n._delete) mergedNodes.push(n);
+                  });
+                  f.dataStructureState.nodes = mergedNodes;
+                }
+              }
+            }
           }
-          if (!f.recursionTree && result.frames[i-1].recursionTree) {
-            f.recursionTree = JSON.parse(JSON.stringify(result.frames[i-1].recursionTree));
+
+          if (result.frames[i - 1].recursionTree) {
+            if (!f.recursionTree) f.recursionTree = {};
+            const prevRT = result.frames[i - 1].recursionTree;
+            for (const key of Object.keys(prevRT)) {
+              if (!(key in f.recursionTree)) {
+                f.recursionTree[key] = JSON.parse(JSON.stringify(prevRT[key]));
+              } else if (key === 'nodes' && Array.isArray(f.recursionTree.nodes) && Array.isArray(prevRT.nodes)) {
+                const newNodesMap = new Map();
+                f.recursionTree.nodes.forEach(n => {
+                  if (n && n.id !== undefined) newNodesMap.set(n.id, n);
+                });
+
+                if (newNodesMap.size > 0 && newNodesMap.size === f.recursionTree.nodes.length) {
+                  const mergedNodes = prevRT.nodes.map(n => {
+                    if (newNodesMap.has(n.id)) {
+                      const updatedNode = newNodesMap.get(n.id);
+                      newNodesMap.delete(n.id);
+                      if (updatedNode._delete) return null;
+                      return { ...n, ...updatedNode };
+                    }
+                    return JSON.parse(JSON.stringify(n));
+                  }).filter(n => n !== null);
+                  newNodesMap.forEach(n => {
+                    if (!n._delete) mergedNodes.push(n);
+                  });
+                  f.recursionTree.nodes = mergedNodes;
+                }
+              }
+            }
           }
-          
+
           // Carry over missing variables
-          const prevVars = result.frames[i-1].variables || {};
+          const prevVars = result.frames[i - 1].variables || {};
           for (const k of Object.keys(prevVars)) {
             if (!(k in f.variables)) {
               f.variables[k] = JSON.parse(JSON.stringify(prevVars[k]));
+            } else if (typeof f.variables[k] === 'object' && typeof prevVars[k] === 'object') {
+              f.variables[k] = { ...prevVars[k], ...f.variables[k] };
             }
           }
         }
 
         // Ensure prevValue exists for inspector
         if (i > 0) {
-          const prevVars = result.frames[i-1].variables || {};
+          const prevVars = result.frames[i - 1].variables || {};
           for (const [k, v] of Object.entries(f.variables)) {
             v.prevValue = prevVars[k] ? prevVars[k].value : undefined;
             v.changedThisFrame = JSON.stringify(v.value) !== JSON.stringify(v.prevValue);
