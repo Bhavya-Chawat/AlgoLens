@@ -11,13 +11,14 @@ const POINTER_NAMES = new Set([
   'l', 'r', 'top', 'bot', 'low', 'high',
 ]);
 
-// Returns the "best" array variable to highlight (largest / most likely main array)
-function findMainArray(variables) {
+function findMainArray(uniqueArrays) {
   let best = null;
   let bestLen = -1;
-  for (const [name, info] of Object.entries(variables)) {
-    const val = info && info.value !== undefined ? info.value : info;
-    if (!Array.isArray(val)) continue;
+  for (const arrObj of uniqueArrays) {
+    const name = arrObj.name;
+    const val = arrObj.info.value;
+    if (!Array.isArray(val) && typeof val !== 'string') continue;
+    
     // Prefer names that sound like main input arrays
     const isMain = /^(nums|arr|array|a|s|list|data|input|grid|matrix|board)$/.test(name);
     const len = val.length;
@@ -57,6 +58,9 @@ export function detectStructures(frame) {
     let effectiveVal = val;
     if (typeof val === 'string' && !isNaN(val) && val.trim() !== '') {
       effectiveVal = Number(val);
+    } else if (typeof val === 'string' && isNaN(val) && val.length > 0) {
+      // Convert standard strings to character arrays for visualization
+      effectiveVal = val.split('');
     }
 
     if (Array.isArray(effectiveVal)) {
@@ -68,11 +72,21 @@ export function detectStructures(frame) {
       }
       // Stack detection
       else if (/^(stack|st)$/.test(nameLower) || (effectiveVal.__class__ && effectiveVal.__class__.toLowerCase().includes('stack'))) {
-        stacks.push({ name, info: { ...info, value: effectiveVal } });
+        const isMonotonic = /monotonic/.test(nameLower) || frame?.dataStructureState?.type === 'monotonic_stack';
+        stacks.push({ name, info: { ...info, value: effectiveVal }, isMonotonic });
       }
       // Queue detection
       else if (/^(queue|q|dq|deque)$/.test(nameLower) || (effectiveVal.__class__ && effectiveVal.__class__.toLowerCase().includes('queue')) || (effectiveVal.__class__ && effectiveVal.__class__.toLowerCase().includes('deque'))) {
-        queues.push({ name, info: { ...info, value: effectiveVal } });
+        const isMonotonic = /monotonic/.test(nameLower) || frame?.dataStructureState?.type === 'monotonic_queue';
+        queues.push({ name, info: { ...info, value: effectiveVal }, isMonotonic });
+      }
+      // Tree (Segment tree / Heap)
+      else if (!is2D && (frame?.dataStructureState?.type === 'segment_tree' || frame?.dataStructureState?.type === 'priority_queue' || /^(heap|pq|segtree)$/.test(nameLower))) {
+        trees.push({ name, info: { ...info, value: effectiveVal }, isArrayBased: true, type: frame?.dataStructureState?.type || 'priority_queue' });
+      }
+      // Fenwick Tree
+      else if (!is2D && (frame?.dataStructureState?.type === 'fenwick_tree' || /^(bit|fenwick)$/.test(nameLower))) {
+        arrays.push({ name, info: { ...info, value: effectiveVal }, is2D: false, isFenwick: true });
       }
       // Standard array
       else {
@@ -94,6 +108,24 @@ export function detectStructures(frame) {
       else if (((info.type || '') === 'dict' || !effectiveVal.__class__) && Object.values(effectiveVal).length > 0 && Array.isArray(Object.values(effectiveVal)[0])) {
         graphs.push({ name, info: { ...info, value: effectiveVal }, is2D: false, type: 'adj_list' });
       }
+      // Check for Trie (Nested dict)
+      else if (frame?.dataStructureState?.type === 'trie' || /^(trie|root)$/.test(nameLower) && isObject(Object.values(effectiveVal)[0])) {
+        // Convert nested dict to graph adjacency list
+        const adj = {};
+        let nodeId = 0;
+        const traverse = (node, currentId) => {
+          adj[currentId] = [];
+          for (const [char, child] of Object.entries(node)) {
+            if (char === 'isEnd' || char === '$') continue;
+            nodeId++;
+            const childId = nodeId;
+            adj[currentId].push({ to: childId, label: char });
+            if (isObject(child)) traverse(child, childId);
+          }
+        };
+        traverse(effectiveVal, 0);
+        graphs.push({ name, info: { ...info, value: adj }, is2D: false, type: 'trie' });
+      }
       // Otherwise, standard hashmap / object
       else if ((info.type || '') === 'dict' || !effectiveVal.__class__) {
         hashmaps.push({ name, info: { ...info, value: effectiveVal } });
@@ -103,10 +135,25 @@ export function detectStructures(frame) {
     }
   }
 
+  // Deduplicate structures referring to the same underlying data
+  const deduplicate = (arr) => {
+    const seen = new Set();
+    return arr.filter(item => {
+      const str = JSON.stringify(item.info.value);
+      if (seen.has(str)) return false;
+      seen.add(str);
+      return true;
+    });
+  };
+  
+  const uniqueArrays = deduplicate(arrays);
+  const uniqueHashmaps = deduplicate(hashmaps);
+  const uniqueLinkedLists = deduplicate(linkedLists);
+
   // Decide on primary + secondary visualizers
   const hasRecursion = cs.length > 1;
-  const mainArrayName = findMainArray(vars);
-  const mainArray     = arrays.find((a) => a.name === mainArrayName) ?? (arrays.length > 0 ? arrays[0] : null);
+  const mainArrayName = findMainArray(uniqueArrays);
+  const mainArray     = uniqueArrays.find((a) => a.name === mainArrayName) ?? (uniqueArrays.length > 0 ? uniqueArrays[0] : null);
 
   const pointers = {};
   if (mainArray) {
@@ -119,7 +166,17 @@ export function detectStructures(frame) {
   }
 
   // Base output obj
-  const output = { mainArray, arrays, stacks, queues, graphs, hashmaps, linkedLists, trees, pointers, integers, vars };
+  const output = { 
+    mainArray, 
+    arrays: uniqueArrays, 
+    stacks: deduplicate(stacks), 
+    queues: deduplicate(queues), 
+    graphs: deduplicate(graphs), 
+    hashmaps: uniqueHashmaps, 
+    linkedLists: uniqueLinkedLists, 
+    trees: deduplicate(trees), 
+    pointers, integers, vars 
+  };
 
   // ─── Choose visualizer mode ────────────────────────────────
   const aiType = frame?.dataStructureState?.type;

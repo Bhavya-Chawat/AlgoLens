@@ -17,6 +17,8 @@ import {
   QueueVisualizer,
   GraphVisualizer
 } from './Visualizers';
+import { IntervalVisualizer } from './IntervalVisualizer';
+import { UnionFindVisualizer } from './UnionFindVisualizer';
 
 // ============================================================
 // BUG BANNER
@@ -634,28 +636,96 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
           })()}
         </div>
 
-        {/* ── RECURSION TREE ── */}
-        {callTree && (
-          <Section label="Call Stack Tree">
-            <RecursionTreeViz
-              nodes={callTree.nodes}
-              roots={callTree.roots}
-              layoutDims={callTree.dims}
+        {/* ── GRAPHS ── */}
+        {detected.graphs && detected.graphs.length > 0 && (
+          <Section label="Graph">
+            {detected.graphs.map((graph, idx) => (
+              <GraphVisualizer
+                key={idx}
+                graphData={graph}
+                prevVars={prevVars}
+              />
+            ))}
+          </Section>
+        )}
+
+        {/* ── TREES ── */}
+        {detected.trees && detected.trees.length > 0 && (
+          <Section label="Tree">
+            {detected.trees.map((tree, idx) => (
+              <TreeVisualizer
+                key={idx}
+                treeData={tree}
+                pointers={detected.pointers}
+                prevVars={prevVars}
+                vars={detected.vars}
+              />
+            ))}
+          </Section>
+        )}
+
+        {/* ── INTERVALS ── */}
+        {detected.type === 'interval' && detected.mainArray && (
+          <Section label="Intervals">
+            <IntervalVisualizer
+              intervals={detected.mainArray.info.value}
+              isBugFrame={isBugFrame}
+              prevVars={prevVars}
             />
           </Section>
         )}
 
         {/* ── ARRAY / STRING / SET + POINTERS ── */}
-        {(['array', 'sliding_window', 'array_hashmap', 'recursion', 'set'].includes(detected.type)) &&
-          detected.mainArray && (
-            <Section label={`Array — ${detected.mainArray.name}`}>
-              <ArrayVisualizer
-                mainArray={detected.mainArray}
+        {(['array', 'sliding_window', 'array_hashmap', 'recursion', 'set', 'hashmap'].includes(detected.type) && detected.type !== 'interval' && detected.type !== 'union_find') &&
+          detected.arrays && detected.arrays.length > 0 && (
+            <Section label="Arrays">
+              {detected.arrays.map((arr, idx) => (
+                <div key={idx} style={{ marginBottom: idx < detected.arrays.length - 1 ? 16 : 0 }}>
+                  <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', marginBottom: 8, fontWeight: 'bold' }}>
+                    {arr.name}
+                  </div>
+                  <ArrayVisualizer
+                    mainArray={arr}
+                    pointers={arr.name === detected.mainArray?.name ? detected.pointers : {}}
+                    slidingWindow={
+                      arr.name === detected.mainArray?.name
+                        ? (('left' in detected.pointers && 'right' in detected.pointers) ? [detected.pointers.left, detected.pointers.right]
+                           : ('start' in detected.pointers && 'end' in detected.pointers) ? [detected.pointers.start, detected.pointers.end]
+                           : ('l' in detected.pointers && 'r' in detected.pointers) ? [detected.pointers.l, detected.pointers.r]
+                           : null)
+                        : null
+                    }
+                    isBugFrame={isBugFrame}
+                    prevVars={prevVars}
+                  />
+                </div>
+              ))}
+            </Section>
+        )}
+
+        {/* ── LINKED LISTS ── */}
+        {detected.linkedLists && detected.linkedLists.length > 0 && (
+          <Section label="Linked List">
+            {detected.linkedLists.map((ll, idx) => (
+              <LinkedListVisualizer
+                key={idx}
+                listData={ll}
                 pointers={detected.pointers}
-                isBugFrame={isBugFrame}
                 prevVars={prevVars}
               />
-            </Section>
+            ))}
+          </Section>
+        )}
+
+        {/* ── UNION FIND ── */}
+        {detected.type === 'union_find' && (
+          <Section label="Union Find">
+            <UnionFindVisualizer
+              parentArray={detected.vars?.parent?.value || detected.vars?.parent}
+              rankArray={detected.vars?.rank?.value || detected.vars?.rank}
+              isBugFrame={isBugFrame}
+            />
+          </Section>
         )}
 
         {/* ── STACKS ── */}
@@ -684,48 +754,6 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
           </Section>
         )}
 
-        {/* ── GRAPHS ── */}
-        {detected.graphs && detected.graphs.length > 0 && (
-          <Section label="Graph">
-            {detected.graphs.map((graph, idx) => (
-              <GraphVisualizer
-                key={idx}
-                graphData={graph}
-                prevVars={prevVars}
-              />
-            ))}
-          </Section>
-        )}
-
-        {/* ── LINKED LISTS ── */}
-        {detected.linkedLists && detected.linkedLists.length > 0 && (
-          <Section label="Linked List">
-            {detected.linkedLists.map((ll, idx) => (
-              <LinkedListVisualizer
-                key={idx}
-                listData={ll}
-                pointers={detected.pointers}
-                prevVars={prevVars}
-              />
-            ))}
-          </Section>
-        )}
-
-        {/* ── TREES ── */}
-        {detected.trees && detected.trees.length > 0 && (
-          <Section label="Tree">
-            {detected.trees.map((tree, idx) => (
-              <TreeVisualizer
-                key={idx}
-                treeData={tree}
-                pointers={detected.pointers}
-                prevVars={prevVars}
-                vars={detected.vars}
-              />
-            ))}
-          </Section>
-        )}
-
         {/* ── HASHMAP / SET ── */}
         {(['hashmap', 'array_hashmap', 'set'].includes(detected.type)) &&
           detected.hashmaps.length > 0 && (
@@ -735,19 +763,6 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
                 prevVars={prevVars}
               />
             </Section>
-        )}
-
-        {/* ── GENERIC BOARD ── */}
-        {detected.type === 'generic' && (
-          <Section label="Variables">
-            <GenericBoard 
-              vars={detected.vars} 
-              isBitwise={
-                state.detectedAlgorithm === 'Bit Manipulation' || 
-                (state.leetcodeProblem?.topicTags || []).some(t => t.name.toLowerCase().includes('bit'))
-              }
-            />
-          </Section>
         )}
 
         {/* ── BITWISE VISUALIZER ── */}
@@ -773,6 +788,30 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
                  </div>
                ))}
              </div>
+          </Section>
+        )}
+
+        {/* ── RECURSION TREE ── */}
+        {callTree && (
+          <Section label="Call Stack Tree">
+            <RecursionTreeViz
+              nodes={callTree.nodes}
+              roots={callTree.roots}
+              layoutDims={callTree.dims}
+            />
+          </Section>
+        )}
+
+        {/* ── GENERIC BOARD ── */}
+        {detected.type === 'generic' && (
+          <Section label="Variables">
+            <GenericBoard 
+              vars={detected.vars} 
+              isBitwise={
+                state.detectedAlgorithm === 'Bit Manipulation' || 
+                (state.leetcodeProblem?.topicTags || []).some(t => t.name.toLowerCase().includes('bit'))
+              }
+            />
           </Section>
         )}
 

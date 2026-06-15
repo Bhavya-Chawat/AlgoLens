@@ -17,8 +17,9 @@ function depthColor(d) { return DEPTH_COLORS[d] ?? '#9CA3AF'; }
 // ============================================================
 // ARRAY & 2D GRID/MATRIX VISUALIZER
 // ============================================================
-function ArrayVisualizer({ mainArray, pointers, isBugFrame, prevVars }) {
-  const { name, info, is2D, window: slidingWindow, highlights } = mainArray;
+function ArrayVisualizer({ mainArray, pointers, isBugFrame, prevVars, slidingWindow: propSlidingWindow }) {
+  const { name, info, is2D, window, highlights } = mainArray;
+  const slidingWindow = propSlidingWindow || window;
   const values  = info.value || [];
   
   if (is2D && Array.isArray(values)) {
@@ -946,6 +947,19 @@ function TreeVisualizer({ treeData, pointers, prevVars, vars = {} }) {
     });
     // Assuming root is the first node or node 0
     root = nodeMap[0] || nodeMap[aiNodes[0].id];
+  } else if (treeData.isArrayBased && Array.isArray(info?.value)) {
+    // Handle array-based trees (Heaps, Segment Trees)
+    const arr = info.value;
+    const buildNode = (idx) => {
+      if (idx >= arr.length || arr[idx] === null || arr[idx] === undefined) return null;
+      return {
+        val: arr[idx],
+        left: buildNode(2 * idx + 1),
+        right: buildNode(2 * idx + 2),
+        index: idx
+      };
+    };
+    root = buildNode(0);
   }
 
   if (!root) return null;
@@ -1213,6 +1227,15 @@ function StackVisualizer({ stackData, prevVars }) {
       }}>
         <span style={{ color: depthColor(0), fontWeight: 600 }}>{name}</span>
         <span style={{ opacity: 0.6 }}>[Stack size: {n}]</span>
+        {stackData.isMonotonic && (
+          <span style={{
+            fontSize: 9, padding: '2px 6px',
+            background: 'rgba(16,185,129,0.15)',
+            color: '#10B981', borderRadius: 4, fontWeight: 600,
+          }}>
+            MONOTONIC
+          </span>
+        )}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'flex-start' }}>
@@ -1295,6 +1318,15 @@ function QueueVisualizer({ queueData, prevVars }) {
       }}>
         <span style={{ color: depthColor(0), fontWeight: 600 }}>{name}</span>
         <span style={{ opacity: 0.6 }}>[Queue size: {n}]</span>
+        {queueData.isMonotonic && (
+          <span style={{
+            fontSize: 9, padding: '2px 6px',
+            background: 'rgba(16,185,129,0.15)',
+            color: '#10B981', borderRadius: 4, fontWeight: 600,
+          }}>
+            MONOTONIC
+          </span>
+        )}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>

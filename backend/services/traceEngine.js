@@ -5,38 +5,50 @@ function generateDriver(language, code, testInput) {
   let methodName = '';
   const lang = (language || '').toLowerCase();
   
+  let argsToPass = [];
+  if (Array.isArray(testInput) && testInput.length > 0) {
+    const first = testInput[0];
+    if (typeof first === 'object' && first !== null && !Array.isArray(first)) {
+      argsToPass = Object.values(first);
+    } else {
+      argsToPass = [first]; // Fallback if it's an array of primitives
+    }
+  } else {
+    argsToPass = [testInput];
+  }
+
   if (lang.includes('python')) {
     const match = code.match(/def\s+([a-zA-Z_]\w*)\s*\(\s*self/);
     if (match) methodName = match[1];
     if (methodName) {
-      const args = Array.isArray(testInput) ? testInput.map(i => JSON.stringify(i)).join(', ') : JSON.stringify(testInput);
+      const args = argsToPass.map(i => JSON.stringify(i)).join(', ');
       driver = `\n\n# AUTO-GENERATED DRIVER\nsol = Solution()\nresult = sol.${methodName}(${args})\nprint(result)\n`;
     }
   } else if (lang.includes('java') && !lang.includes('javascript')) {
     const match = code.match(/class\s+Solution\s*\{[\s\S]*?(?:public|private|protected)\s+(?:static\s+)?(?:[\w<>,\s\[\]]+)\s+([a-zA-Z_]\w*)\s*\(/);
     if (match) methodName = match[1];
     if (methodName) {
-      const args = Array.isArray(testInput) ? testInput.map(i => JSON.stringify(i).replace(/\[/g, '{').replace(/\]/g, '}')).join(', ') : JSON.stringify(testInput);
+      const args = argsToPass.map(i => JSON.stringify(i).replace(/\[/g, '{').replace(/\]/g, '}')).join(', ');
       driver = `\n\n// AUTO-GENERATED DRIVER\npublic class Main {\n    public static void main(String[] args) {\n        Solution sol = new Solution();\n        Object result = sol.${methodName}(${args});\n        System.out.println(result);\n    }\n}\n`;
     }
   } else if (lang.includes('cpp') || lang.includes('c++') || lang.includes('c_cpp')) {
     const match = code.match(/class\s+Solution\s*\{[\s\S]*?public:\s*(?:[\w<>,\s\[\]\*\&]+)\s+([a-zA-Z_]\w*)\s*\(/);
     if (match) methodName = match[1];
     if (methodName) {
-      const args = Array.isArray(testInput) ? testInput.map(i => JSON.stringify(i).replace(/\[/g, '{').replace(/\]/g, '}')).join(', ') : JSON.stringify(testInput);
+      const args = argsToPass.map(i => JSON.stringify(i).replace(/\[/g, '{').replace(/\]/g, '}')).join(', ');
       driver = `\n\n// AUTO-GENERATED DRIVER\nint main() {\n    Solution sol;\n    auto result = sol.${methodName}(${args});\n    return 0;\n}\n`;
     }
   } else if (lang.includes('javascript') || lang.includes('js') || lang.includes('typescript') || lang.includes('ts')) {
     const matchVar = code.match(/(?:var|let|const)\s+([a-zA-Z_]\w*)\s*=\s*function/);
     if (matchVar) {
       methodName = matchVar[1];
-      const args = Array.isArray(testInput) ? testInput.map(i => JSON.stringify(i)).join(', ') : JSON.stringify(testInput);
+      const args = argsToPass.map(i => JSON.stringify(i)).join(', ');
       driver = `\n\n// AUTO-GENERATED DRIVER\nconst result = ${methodName}(${args});\nconsole.log(result);\n`;
     } else {
       const matchClass = code.match(/class\s+Solution\s*\{[\s\S]*?([a-zA-Z_]\w*)\s*\(/);
       if (matchClass) {
         methodName = matchClass[1];
-        const args = Array.isArray(testInput) ? testInput.map(i => JSON.stringify(i)).join(', ') : JSON.stringify(testInput);
+        const args = argsToPass.map(i => JSON.stringify(i)).join(', ');
         driver = `\n\n// AUTO-GENERATED DRIVER\nconst sol = new Solution();\nconst result = sol.${methodName}(${args});\nconsole.log(result);\n`;
       }
     }
@@ -67,25 +79,26 @@ Your task is to mentally execute the user's ${language} code step-by-step on the
 Do NOT output any markdown, explanations, or code blocks outside of the JSON. ONLY valid JSON.
 
 CRITICAL INSTRUCTIONS:
-1. Every loop iteration MUST be its own frame. Never skip iterations unless the loop runs more than 30 times — only then summarize the middle, but always show the first 3 and last 3 iterations.
-2. Every frame MUST have 'dataStructureState' with a non-generic type if a primary structure exists. Forbidden to use "type": "generic" unless the code literally has no recognizable data structure.
-3. 'codeWithValues' is mandatory every frame. Replace every variable in the executing line with its actual current value (e.g., 'if nums[1] < 9' instead of 'if nums[i] < target').
-4. 'explanation' must be human-readable and specific (e.g., "Checking if nums[1] (value 7) is less than target (9) — it is, so we continue.").
-5. 'variables' must include EVERY variable in scope, not just the ones that changed. Always include the main input array/structure in full so the frontend can render it.
-6. The 'event' field MUST be exactly one of: function_call | loop_iteration | comparison | assignment | return | branch_true | branch_false | swap | recurse | base_case.
-7. Output the COMPLETE trace until the function fully finishes returning. DO NOT STOP EARLY. If the function is recursive, trace the entire call tree until the root returns.
-8. ABSOLUTELY DO NOT GET LAZY. You MUST output every single frame until the algorithm terminates completely. Do NOT close the JSON array early just because it is getting long.
+1. KEY-STEP DEBUGGING: Do NOT output a frame for every single line of code. A human user does not want to click through 50 repetitive steps. Group mundane operations (like a simple condition check + assignment) into a single logical "Key-Step" frame.
+2. SKIP INITIALIZATION: Do NOT output frames for trivial variable declarations or empty data structure initializations (e.g., \`left = 0\`, \`maxLen = 0\`, \`set = new HashSet()\`). Skip straight to the first meaningful step where logic actually begins (e.g., the first iteration of the main loop).
+3. MAXIMUM FRAME LIMIT: You MUST output a MAXIMUM of 25 frames for the entire execution. If an algorithm loops many times, aggressively SKIP the repetitive middle iterations. Only show the most important algorithmic milestones (e.g., window expanding, duplicate found, target matched, base case reached).
+4. Every frame MUST have 'dataStructureState' with a non-generic type if a primary structure exists. Forbidden to use "type": "generic" unless the code literally has no recognizable data structure.
+5. 'codeWithValues' is mandatory every frame. If you grouped multiple lines, put the most important line here (e.g., 'if nums[1] < 9' or 'maxLen = 3').
+5. 'explanation' must be extremely concise (under 10 words) to save tokens (e.g., "nums[1] < target, continuing").
+6. 'variables' must include EVERY variable in scope, not just the ones that changed. Always include the main input array/structure in full so the frontend can render it.
+7. The 'event' field MUST be exactly one of: function_call | loop_iteration | comparison | assignment | return | branch_true | branch_false | swap | recurse | base_case.
 9. TOKEN LIMIT OPTIMIZATION (CRITICAL):
    - OMIT 'dataStructureState' completely from the frame if it has NOT changed since the previous frame.
    - OMIT 'recursionTree' completely from the frame if the call stack has NOT changed.
-   - OMIT the full tree/graph object from the 'variables' dictionary. Only include primitives (int, bool, string) and small arrays. The backend will automatically carry over unchanged states.
+   - OMIT the full tree/graph object from the 'variables' dictionary. Only include primitives (int, bool, string) and small arrays.
+   - OMIT any variable from 'variables' if its value has NOT changed since the previous frame. Only include variables that changed or are new. The backend will automatically carry them over.
 
-10. CHAIN OF THOUGHT (CRITICAL):
-    Before outputting the JSON, you MUST write a '<scratchpad>' block where you carefully simulate the execution step-by-step. Keep track of the call stack, variables, and return values mentally. This will prevent you from making mistakes or stopping early.
+10. CHAIN OF THOUGHT (CRITICAL BUT CONCISE):
+    Write a VERY BRIEF '<scratchpad>' block to trace the state. Do NOT write long sentences in the scratchpad. Keep it to a few words per step to save output tokens.
     Format:
     <scratchpad>
-    Step 1: maxDepth(root=3) called.
-    Step 2: left = maxDepth(9) called...
+    S1: maxDepth(3)
+    S2: left=maxDepth(9)
     ...
     </scratchpad>
     \`\`\`json
@@ -102,14 +115,34 @@ CRITICAL INSTRUCTIONS:
     - The right child of node at index i is at 2*i + 2.
     - 'null' means the child doesn't exist. You MUST correctly mentally build this tree before tracing! Do NOT hallucinate nulls. Node 7 in [3,9,20,null,null,15,7] is a VALID node, not null!
 
-STRUCTURE DETECTION RULES:
-- array: populate pointers with every index variable (i, j, left, right, etc.) and highlights with currently accessed indices.
-- sliding_window: always include window: [left, right]
-- hashmap: include current key-value state
-- set: output the set contents as a flat array (e.g. ["a", "b", "c"]) and use type "set"
-- binary_tree: ALWAYS include recursionTree with nodes[] showing the full call stack as a tree, updating every frame, and include full nodes[] every frame with highlight: "active|visited|none"
-- linked_list: include nodes[] with id, val, next, highlight, label
-- stack/queue: include array showing current contents
+13. DATA STRUCTURE TAXONOMY & ENFORCED TYPES (CRITICAL):
+    You MUST output EXACTLY ONE of these types as the primary 'dataStructureState.type'. Include auxiliary data in 'variables'.
+    - array: 1D arrays, strings. Include pointers as integer variables.
+    - matrix: 2D grids, boards.
+    - sliding_window: Include 'window: [left, right]' in pointers if applicable.
+    - two_pointers: Standard array/string but explicitly flagged.
+    - hashmap: Include key-value state.
+    - set: Output contents as a flat array (e.g. ["a", "b", "c"]).
+    - stack: Output as array. Note if monotonic.
+    - queue: Output as array. Note if monotonic.
+    - priority_queue: ALWAYS output as a flat 0-indexed array (heap representation), NEVER as pointer/node objects.
+    - linked_list: Output nodes[] with id, val, next, highlight, label.
+    - binary_tree: Output nodes[] array.
+    - graph: Adjacency list. Include 'directed' and 'weighted' boolean flags in variables if applicable.
+    - trie: ALWAYS output as a nested dictionary, NEVER as node arrays.
+    - union_find: Output 'parent' and 'rank' arrays.
+    - interval: Output as 2D array of [start, end].
+    - segment_tree: ALWAYS output as a flat 0-indexed array. NEVER output as pointer/node objects.
+    - fenwick_tree: Output as flat array (1-indexed but JS arrays are 0-indexed).
+    - bitwise: Output variables as raw integers, the frontend will render the bits.
+    - recursion: Backtracking where state is implicit in call stack.
+    - generic: Fallback.
+
+14. DP METADATA:
+    If a cell in an array/matrix is derived from previous cells (DP), include a 'dp_derivation: [source_index_1, source_index_2]' in the frame if possible.
+
+15. JSON STRING ESCAPING (CRITICAL):
+    Whenever you include code snippets, characters, or string values in 'codeWithValues' or 'explanation', you MUST either use single quotes (e.g. 'a') OR properly escape double quotes (e.g. \\"a\\"). NEVER use unescaped double quotes inside a JSON string value.
 
 JSON SCHEMA TO FOLLOW EXACTLY:
 {
@@ -184,10 +217,41 @@ ${runnableCode}`;
       jsonStr = jsonBlockMatch[1];
     } else {
       const fallbackMatch = responseContent.match(/\{[\s\S]*"frames"\s*:[\s\S]*\}/);
-      if (fallbackMatch) jsonStr = fallbackMatch[0];
+      if (fallbackMatch) {
+        jsonStr = fallbackMatch[0];
+      } else {
+        // Find the first `{` and last `}` as a last resort
+        const firstBrace = responseContent.indexOf('{');
+        const lastBrace = responseContent.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          jsonStr = responseContent.substring(firstBrace, lastBrace + 1);
+        }
+      }
     }
     
-    const result = JSON.parse(jsonStr);
+    // Clean up any trailing garbage after the JSON object
+    jsonStr = jsonStr.trim();
+    
+    let result;
+    try {
+      result = JSON.parse(jsonStr);
+    } catch (parseError) {
+      // Try to repair truncated JSON (LLM token limit reached)
+      try {
+        const lastCompleteFrame = jsonStr.lastIndexOf('},');
+        if (lastCompleteFrame > 0) {
+          const repairedStr = jsonStr.substring(0, lastCompleteFrame + 1) + ']}';
+          result = JSON.parse(repairedStr);
+          result.error = "The trace was too long and was truncated. Some later steps are missing.";
+          console.log("Successfully repaired truncated JSON.");
+        } else {
+          throw parseError;
+        }
+      } catch(e) {
+        console.error("Failed to parse JSON trace:", parseError, "Raw string was:", jsonStr.substring(0, 100) + "...");
+        result = { frames: [], error: "LLM output could not be parsed as valid JSON. It may have exceeded token limits." };
+      }
+    }
     
     // Add IDs to frames
     if (result.frames && Array.isArray(result.frames)) {
@@ -202,6 +266,14 @@ ${runnableCode}`;
           }
           if (!f.recursionTree && result.frames[i-1].recursionTree) {
             f.recursionTree = JSON.parse(JSON.stringify(result.frames[i-1].recursionTree));
+          }
+          
+          // Carry over missing variables
+          const prevVars = result.frames[i-1].variables || {};
+          for (const k of Object.keys(prevVars)) {
+            if (!(k in f.variables)) {
+              f.variables[k] = JSON.parse(JSON.stringify(prevVars[k]));
+            }
           }
         }
 
