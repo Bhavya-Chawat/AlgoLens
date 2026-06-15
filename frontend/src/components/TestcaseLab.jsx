@@ -54,7 +54,18 @@ export default function TestcaseLab() {
     setCustomCases(prev => prev.map(c => {
       if (c.id !== id) return c;
       let data = {};
-      try { data = JSON.parse(val); } catch { /* leave empty */ }
+      const lines = val.split('\n');
+      for (const line of lines) {
+        const idx = line.indexOf('=');
+        if (idx > -1) {
+          const k = line.substring(0, idx).trim();
+          const vStr = line.substring(idx + 1).trim();
+          if (k) {
+            try { data[k] = JSON.parse(vStr); }
+            catch { data[k] = vStr; }
+          }
+        }
+      }
       return { ...c, inputStr: val, data };
     }));
   };
@@ -180,7 +191,7 @@ export default function TestcaseLab() {
               <textarea
                 value={tc.inputStr || ''}
                 onChange={(e) => updateCustomCaseInput(tc.id, e.target.value)}
-                placeholder='{"nums": [1,2,3], "target": 5}'
+                placeholder="nums=[1,2,3]&#10;target=5"
                 rows={2}
                 style={{
                   width: '100%', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 6,

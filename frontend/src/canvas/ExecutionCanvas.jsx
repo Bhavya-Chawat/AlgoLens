@@ -676,7 +676,7 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
         )}
 
         {/* ── ARRAY / STRING / SET + POINTERS ── */}
-        {(['array', 'sliding_window', 'array_hashmap', 'recursion', 'set', 'hashmap'].includes(detected.type) && detected.type !== 'interval' && detected.type !== 'union_find') &&
+        {(['array', 'sliding_window', 'array_hashmap', 'recursion', 'set', 'hashmap', 'prefix_sum'].includes(detected.type) && detected.type !== 'interval' && detected.type !== 'union_find') &&
           detected.arrays && detected.arrays.length > 0 && (
             <Section label="Arrays">
               {detected.arrays.map((arr, idx) => (
@@ -749,6 +749,20 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
                 key={idx}
                 queueData={queue}
                 prevVars={prevVars}
+              />
+            ))}
+          </Section>
+        )}
+
+        {/* ── STACK / QUEUE ── */}
+        {['stack', 'queue', 'monotonic_stack'].includes(detected.type) && detected.arrays && detected.arrays.length > 0 && (
+          <Section label="Stack / Queue">
+            {detected.arrays.map((arr, idx) => (
+              <ArrayVisualizer
+                key={idx}
+                arrayData={arr}
+                prevVars={prevVars}
+                pointers={detected.pointers}
               />
             ))}
           </Section>

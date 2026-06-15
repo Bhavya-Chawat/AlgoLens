@@ -14,18 +14,18 @@
 /* ---- CSS CUSTOM PROPERTIES ---- */
 :root {
   /* Light Theme */
-  --bg-page: #FAF8F5;
+  --bg-page: #F8F9FA;
   --bg-card: #FFFFFF;
-  --bg-canvas: #F5F2EE;
-  --accent-sage: #8FAF9D;
-  --accent-sage-hover: #7A9E8A;
-  --accent-terracotta: #D49B84;
-  --accent-amber: #E7C36A;
-  --text-primary: #2B2B2B;
-  --text-secondary: #6B6B6B;
-  --text-muted: #9B9B9B;
-  --border: #E8E4DE;
-  --border-hover: #D0CBC2;
+  --bg-canvas: #F0F4F8;
+  --accent-sage: #6DD3A5;
+  --accent-sage-hover: #5BC293;
+  --accent-terracotta: #FF9B8A;
+  --accent-amber: #FFD166;
+  --text-primary: #111111;
+  --text-secondary: #444444;
+  --text-muted: #888888;
+  --border: #E2E8F0;
+  --border-hover: #CBD5E1;
 
   /* Dark Theme (defined here but applied via .dark class) */
   --dark-bg-page: #121212;

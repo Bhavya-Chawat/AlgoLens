@@ -60,6 +60,7 @@ const INITIAL_STATE = {
   // Visualizer floating panels
   leftPanelOpen: true,
   rightPanelOpen: true,
+  isAiAssistantOpen: false,
 
   // Settings
   customApiKey: (typeof localStorage !== 'undefined' && localStorage.getItem('algolens-apikey')) || '',

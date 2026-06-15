@@ -81,7 +81,7 @@ Do NOT output any markdown, explanations, or code blocks outside of the JSON. ON
 CRITICAL INSTRUCTIONS:
 1. KEY-STEP DEBUGGING: Do NOT output a frame for every single line of code. A human user does not want to click through 50 repetitive steps. Group mundane operations (like a simple condition check + assignment) into a single logical "Key-Step" frame.
 2. SKIP INITIALIZATION: Do NOT output frames for trivial variable declarations or empty data structure initializations (e.g., \`left = 0\`, \`maxLen = 0\`, \`set = new HashSet()\`). Skip straight to the first meaningful step where logic actually begins (e.g., the first iteration of the main loop).
-3. MAXIMUM FRAME LIMIT: You MUST output a MAXIMUM of 25 frames for the entire execution. If an algorithm loops many times, aggressively SKIP the repetitive middle iterations. Only show the most important algorithmic milestones (e.g., window expanding, duplicate found, target matched, base case reached).
+3. MAXIMUM FRAME LIMIT: You MUST compress the trace to a MAXIMUM of 25 frames for the entire execution. Do NOT end execution in the middle. You MUST reach the final return statement. If an algorithm loops many times, aggressively SKIP the repetitive middle iterations. Only show the most important algorithmic milestones (e.g., window expanding, duplicate found, target matched, base case reached).
 4. Every frame MUST have 'dataStructureState' with a non-generic type if a primary structure exists. Forbidden to use "type": "generic" unless the code literally has no recognizable data structure.
 5. 'codeWithValues' is mandatory every frame. If you grouped multiple lines, put the most important line here (e.g., 'if nums[1] < 9' or 'maxLen = 3').
 5. 'explanation' must be extremely concise (under 10 words) to save tokens (e.g., "nums[1] < target, continuing").
@@ -134,6 +134,8 @@ CRITICAL INSTRUCTIONS:
     - interval: Output as 2D array of [start, end].
     - segment_tree: ALWAYS output as a flat 0-indexed array. NEVER output as pointer/node objects.
     - fenwick_tree: Output as flat array (1-indexed but JS arrays are 0-indexed).
+    - prefix_sum: Array used to store cumulative sums.
+    - monotonic_stack: Stack used to find next greater/smaller elements.
     - bitwise: Output variables as raw integers, the frontend will render the bits.
     - recursion: Backtracking where state is implicit in call stack.
     - generic: Fallback.
@@ -193,7 +195,7 @@ ${runnableCode}`;
 
   try {
     const systemMessage = systemPrompt.split("Test Input:")[0];
-    const userMessage = "Test Input:" + systemPrompt.split("Test Input:")[1] + "\n\nCRITICAL: DO NOT SKIP ANY STEPS. DO NOT STOP AT 11 FRAMES. Trace the algorithm all the way back to the root's final return statement.";
+    const userMessage = "Test Input:" + systemPrompt.split("Test Input:")[1] + "\n\nCRITICAL: Provide full output containing all essential algorithm steps. You MUST reach the final return statement. Combine mundane steps and skip trivial initialization lines to save space.";
 
     const completion = await groq.chat.completions.create({
       messages: [
@@ -208,7 +210,7 @@ ${runnableCode}`;
     let responseContent = completion.choices[0]?.message?.content || "{}";
     
     // DEBUG: Save raw LLM response to disk
-    require('fs').writeFileSync('llm_debug_trace.txt', responseContent, 'utf8');
+    // Debugging only, file removed for prod safety
 
     // Robustly extract JSON, ignoring scratchpad even if it has braces
     let jsonStr = responseContent;

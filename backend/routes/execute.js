@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { getTrace } = require('../services/traceEngine');
+const { runCustomCode } = require('../services/executionService');
 
 router.post('/', async (req, res) => {
   try {
@@ -8,6 +9,17 @@ router.post('/', async (req, res) => {
 
     if (!language || !code) {
       return res.status(400).json({ error: 'Language and code are required.' });
+    }
+
+    let executionOutput = null;
+
+    if (editorMode === 'custom') {
+      const execResult = await runCustomCode(language, code, testInput, judge0ApiKey);
+      if (!execResult.success) {
+        // Return compilation error immediately, skipping AI trace
+        return res.status(400).json({ error: execResult.error.message + '\n\n' + execResult.error.details });
+      }
+      executionOutput = execResult.stdout;
     }
 
     const result = await getTrace(editorMode, language, code, testInput, apiKey, judge0ApiKey);
@@ -18,8 +30,8 @@ router.post('/', async (req, res) => {
 
     res.json({
       frames: result.frames,
-      bugs: [], // Bugs detection can be implemented via another LLM pass if needed
-      result: result.result
+      bugs: [], 
+      result: executionOutput || result.result
     });
 
   } catch (error) {

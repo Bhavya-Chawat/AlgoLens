@@ -18,52 +18,73 @@ Be specific but do not write the corrected code. Reference variable names and fr
 Respond in clean plain text. No markdown. No bullet points. Use short paragraphs.
 Maximum 2 paragraphs.`;
 
-export default function AIDebugAssistant() {
+export default function AIDebugAssistant({ isOpen, onClose }) {
   const { state, update } = useApp();
   const { executionTrace, testcase, detectedBugs } = state;
 
-  const [expanded, setExpanded] = useState(false);
   const [history, setHistory] = useState([]);
   const [activeTabId, setActiveTabId] = useState(null);
-  const [panelHeight, setPanelHeight] = useState(280);
+  
+  const [pos, setPos] = useState({ x: 100, y: 100 });
+  const [size, setSize] = useState({ w: 400, h: 500 });
+  
+  // Initialize position once
+  useEffect(() => {
+    setPos({ x: window.innerWidth - 440, y: window.innerHeight - 560 });
+  }, []);
 
   const activeAnalysis = history.find(h => h.id === activeTabId) || null;
 
-  // Vertical resize for the AI panel
-  const startResize = (e) => {
+  if (!isOpen) return null;
+
+  const startDrag = (e) => {
+    // Prevent drag if clicking on buttons or scrollable areas
+    if (e.target.closest('button') || e.target.closest('.no-drag')) return;
+    
     e.preventDefault();
-    const startY = e.clientY;
-    const startH = expanded ? panelHeight : 48; // if closed, start from 48
+    const startX = e.clientX - pos.x;
+    const startY = e.clientY - pos.y;
 
     const onMove = (ev) => {
-      const delta = startY - ev.clientY; // drag up = grow
-      const newH = Math.max(48, Math.min(600, startH + delta));
-      if (newH > 80 && !expanded) setExpanded(true);
-      if (newH < 80 && expanded) setExpanded(false);
-      
-      setPanelHeight(Math.max(160, newH)); // keep a minimum panel height when open
+      setPos({ x: ev.clientX - startX, y: ev.clientY - startY });
     };
     const onUp = () => {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
     };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
-    document.body.style.cursor = 'row-resize';
-    document.body.style.userSelect = 'none';
+  };
+
+  const startResize = (e, direction) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startW = size.w;
+    const startH = size.h;
+    const startPosX = pos.x;
+    const startPosY = pos.y;
+
+    const onMove = (ev) => {
+      if (direction === 'se') {
+        setSize({ w: Math.max(300, startW + (ev.clientX - startX)), h: Math.max(300, startH + (ev.clientY - startY)) });
+      }
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   };
 
   const runAnalysis = async () => {
-
-    if (!expanded) setExpanded(true);
-
     const newId = Date.now();
     const newAnalysis = { id: newId, text: '', status: 'loading', errorMsg: '' };
     
     setHistory(prev => {
-      const updated = [newAnalysis, ...prev].slice(0, 3); // keep last 3
+      const updated = [newAnalysis, ...prev].slice(0, 3);
       return updated;
     });
     setActiveTabId(newId);
@@ -109,19 +130,15 @@ export default function AIDebugAssistant() {
                 const delta = data.choices[0]?.delta?.content || '';
                 streamedText += delta;
                 
-                // Update history state progressively
                 setHistory(prev => prev.map(h => 
                   h.id === newId ? { ...h, text: streamedText } : h
                 ));
-              } catch (e) {
-                // parse error on chunk, ignore
-              }
+              } catch (e) {}
             }
           }
         }
       }
 
-      // Mark done
       setHistory(prev => prev.map(h => 
         h.id === newId ? { ...h, status: 'done' } : h
       ));
@@ -133,24 +150,14 @@ export default function AIDebugAssistant() {
     }
   };
 
-  // ── RENDER HELPERS ──
-
-  // Highlight frame numbers (e.g. "frame 42") and jump to them
   const renderText = (text) => {
     if (!text) return null;
-    
-    // Remove the algorithm tag before rendering the text
     const cleanText = text.replace(/\[ALGO:\s*.*?\]/i, '').trim();
-
-    // Split by paragraphs
     const paragraphs = cleanText.split('\n\n').filter(p => p.trim());
-
-    // Known variables from the last frame to highlight
     const lastFrameVars = executionTrace[executionTrace.length - 1]?.variables || {};
     const varNames = Object.keys(lastFrameVars).filter(v => v.length > 0);
     
     return paragraphs.map((p, pIdx) => {
-      // Regex to match "frame N" or "Frame N"
       const frameRegex = /(frame\s+\d+)/gi;
       const parts = p.split(frameRegex);
 
@@ -177,7 +184,6 @@ export default function AIDebugAssistant() {
               );
             }
 
-            // Highlight variables if they match exact words
             let textSpan = part;
             varNames.forEach(v => {
               const regex = new RegExp(`\\b${v}\\b`, 'g');
@@ -205,24 +211,16 @@ export default function AIDebugAssistant() {
     });
   };
 
-  // Heuristics for Stat Cards
   const renderStatCards = (text) => {
     let algo = 'Unknown';
-    
-    // Extract [ALGO: ...] tag
     const algoMatch = text.match(/\[ALGO:\s*(.*?)\]/i);
     if (algoMatch) {
       algo = algoMatch[1].trim();
-      // Push to global state safely if not already there
       if (state.detectedAlgorithm !== algo) {
         setTimeout(() => update({ detectedAlgorithm: algo }), 0);
       }
     }
-    
-    // Clean text by removing the tag for sentence extraction
     const cleanText = text.replace(/\[ALGO:\s*.*?\]/i, '').trim();
-
-    // Attempt to extract first sentence for root cause
     const firstSentence = cleanText.split(/[.!?]/)[0] + '.';
 
     return (
@@ -246,41 +244,32 @@ export default function AIDebugAssistant() {
 
   return (
     <div style={{
+      position: 'absolute',
+      top: pos.y, left: pos.x,
+      width: size.w, height: size.h,
       display: 'flex', flexDirection: 'column',
-      borderTop: '1px solid var(--border)', background: 'var(--bg-card)',
-      maxHeight: expanded ? panelHeight : 48,
-      minHeight: 48,
-      overflow: 'hidden',
-      flexShrink: 0,
-      position: 'relative',
-      transition: 'max-height 300ms cubic-bezier(0.16, 1, 0.3, 1)',
+      background: 'var(--bg-card)',
+      border: '1px solid var(--border)',
+      borderRadius: 12,
+      boxShadow: 'var(--shadow-panel)',
+      zIndex: 9999,
+      overflow: 'hidden'
     }}>
-      {/* Resize drag strip — always at the very top */}
+      {/* ── Header Bar ── */}
       <div
-        onMouseDown={startResize}
-        title="Drag to resize"
+        onMouseDown={startDrag}
         style={{
-          position: 'absolute', top: 0, left: 0, right: 0, height: 8,
-          cursor: 'row-resize', zIndex: 10,
-          display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
-          paddingTop: 3,
+          padding: '0 16px', height: 48, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          cursor: 'grab', flexShrink: 0, borderBottom: '1px solid var(--border)', background: 'var(--bg-canvas)',
         }}
       >
-        <div style={{ width: 32, height: 2, borderRadius: 2, background: 'var(--border)', opacity: expanded ? 1 : 0.4 }} />
-      </div>
-
-      {/* ── Header Bar ── always visible at top */}
-      <div style={{
-        padding: '0 16px', height: 48, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        cursor: 'pointer', flexShrink: 0, borderBottom: expanded ? '1px solid var(--border)' : 'none',
-      }} onClick={() => setExpanded(!expanded)}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Bot size={16} style={{ color: 'var(--accent-sage)' }} />
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>AI Debug</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>AI Debug Assistant</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
-            onClick={(e) => { e.stopPropagation(); runAnalysis(); }}
+            onClick={runAnalysis}
             disabled={activeAnalysis?.status === 'loading' || executionTrace.length === 0}
             style={{
               padding: '4px 12px', background: 'var(--accent-sage)', color: '#fff',
@@ -291,14 +280,13 @@ export default function AIDebugAssistant() {
           >
             {activeAnalysis?.status === 'loading' ? 'Analyzing...' : 'Get Hint'}
           </button>
-          {expanded ? <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} /> : <ChevronUp size={14} style={{ color: 'var(--text-muted)' }} />}
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+            <X size={16} />
+          </button>
         </div>
       </div>
 
-      {/* ── Expanded Content (overflow hidden handles show/hide) ── */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-        
-        {/* History Tabs */}
+      <div className="no-drag" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {history.length > 0 && (
           <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', padding: '0 16px', gap: 16, flexShrink: 0 }}>
             {history.map((h, i) => (
@@ -318,15 +306,12 @@ export default function AIDebugAssistant() {
           </div>
         )}
 
-        {/* Content Area */}
         <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
             {!activeAnalysis && (
               <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 16px', gap: 16 }}>
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--border)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.8 }}>
-                  <path d="M2 12h4l2-9 5 18 3-10 3 5h3"></path>
-                </svg>
+                <Bot size={48} style={{ color: 'var(--border)', opacity: 0.8 }} />
                 <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
-                  Analyze your execution to get AI insights.
+                  Analyze your execution to get AI insights without giving away the answer.
                 </div>
               </div>
             )}
@@ -356,12 +341,21 @@ export default function AIDebugAssistant() {
                 {activeAnalysis.status === 'loading' && <span style={{ display: 'inline-block', width: 6, height: 12, background: 'var(--accent-sage)', animation: 'blink 1s step-end infinite' }} />}
               </div>
             )}
-          </div>
-
-          <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)', fontSize: 10, color: 'var(--text-muted)', textAlign: 'right', flexShrink: 0 }}>
-            Each analysis uses approx. 500 tokens. (Groq Free Tier)
-          </div>
         </div>
+      </div>
+      
+      {/* Resize Handle (Bottom Right) */}
+      <div
+        onMouseDown={(e) => startResize(e, 'se')}
+        style={{
+          position: 'absolute', right: 0, bottom: 0, width: 16, height: 16,
+          cursor: 'se-resize', zIndex: 10
+        }}
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ position: 'absolute', bottom: 2, right: 2 }}>
+          <path d="M10 14L14 10M6 14L14 6" stroke="var(--border)" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
+      </div>
     </div>
   );
 }

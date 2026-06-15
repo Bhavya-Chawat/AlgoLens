@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Zap, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Zap, AlertTriangle, Bot } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import TopBar from '../components/TopBar';
 import Timeline from '../components/Timeline';
@@ -284,9 +284,23 @@ function LeftPanel({ isOpen, onToggle, activeLine }) {
           {activeTab === 'diff' && <DiffDebugger />}
         </div>
 
-        {/* FIXED AI Debug Assistant at bottom */}
-        {activeTab === 'code' && (
-          <AIDebugAssistant />
+        {/* Button to open AI Assistant */}
+        {activeTab === 'code' && !state.isAiAssistantOpen && (
+          <div style={{ padding: '16px', borderTop: '1px solid var(--border)' }}>
+            <button
+              onClick={() => update({ isAiAssistantOpen: true })}
+              style={{
+                width: '100%', padding: '10px',
+                background: 'var(--accent-sage)', color: '#fff',
+                border: 'none', borderRadius: 8,
+                fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                transition: 'background var(--motion-standard)'
+              }}
+            >
+              <Bot size={16} /> Open AI Debug Assistant
+            </button>
+          </div>
         )}
       </div>
 
@@ -654,6 +668,12 @@ export default function VisualizerView() {
         <ResizableRightPanel
           isOpen={state.rightPanelOpen}
           onToggle={() => update({ rightPanelOpen: !state.rightPanelOpen })}
+        />
+
+        {/* Floating AI Debug Assistant */}
+        <AIDebugAssistant 
+          isOpen={state.isAiAssistantOpen} 
+          onClose={() => update({ isAiAssistantOpen: false })} 
         />
 
       </div>

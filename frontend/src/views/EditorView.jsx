@@ -215,7 +215,7 @@ function TestPanel() {
       const currentCodeTrimmed = (state.code || '').trim();
       const isPlaceholder = !currentCodeTrimmed || Object.values(PLACEHOLDER_CODE).some(p => p.trim() === currentCodeTrimmed);
 
-      if (data.snippets && isPlaceholder) {
+      if (data.snippets) {
         const snip = data.snippets.find(s => s.langSlug === state.language);
         if (snip) newCode = snip.code;
       }
@@ -369,7 +369,7 @@ function SessionCard() {
             background: 'rgba(143,175,157,0.12)',
             color: 'var(--accent-sage)',
             borderRadius: 20, fontWeight: 500,
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140
+            textAlign: 'right', wordBreak: 'break-word', maxWidth: '65%'
           }} title={problemName}>{problemName}</span>
         </div>
 
@@ -378,7 +378,7 @@ function SessionCard() {
           <span style={{ fontSize: 12, color: 'var(--text-muted)', flexShrink: 0 }}>Category</span>
           <span style={{ 
             fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, textAlign: 'right'
+            textAlign: 'right', wordBreak: 'break-word', maxWidth: '65%'
           }} title={categoryStr}>{categoryStr}</span>
         </div>
 

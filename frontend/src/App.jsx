@@ -90,60 +90,39 @@ function InitialLoader() {
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 40
       }}>
         
-        {/* Motion Graphic Container */}
-        <div style={{ position: 'relative', width: 120, height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          
-          {/* Outer Orbiting Ring */}
-          <div style={{
-            position: 'absolute', width: 120, height: 120,
-            border: '1px dashed rgba(143,175,157,0.4)', borderRadius: '50%',
-            animation: 'orbit-spin 8s linear infinite'
-          }}>
-            <div style={{ position: 'absolute', top: -4, left: '50%', transform: 'translateX(-50%)', width: 8, height: 8, background: 'var(--accent-terracotta)', borderRadius: '50%', boxShadow: '0 0 8px var(--accent-terracotta)' }} />
-            <div style={{ position: 'absolute', bottom: -4, left: '50%', transform: 'translateX(-50%)', width: 6, height: 6, background: 'var(--accent-sage)', borderRadius: '50%' }} />
-          </div>
+        {/* Motion Graphic Container - Graph Data Structure */}
+        <div style={{ position: 'relative', width: 120, height: 120 }}>
+          {/* Edges */}
+          <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 0 }}>
+            <line x1="50%" y1="15%" x2="20%" y2="50%" stroke="var(--accent-sage)" strokeWidth="2" className="animate-draw-line" />
+            <line x1="50%" y1="15%" x2="80%" y2="50%" stroke="var(--accent-terracotta)" strokeWidth="2" className="animate-draw-line" style={{ animationDelay: '0.5s' }} />
+            <line x1="20%" y1="50%" x2="50%" y2="85%" stroke="var(--accent-amber)" strokeWidth="2" className="animate-draw-line" style={{ animationDelay: '1s' }} />
+            <line x1="80%" y1="50%" x2="50%" y2="85%" stroke="var(--accent-sage)" strokeWidth="2" className="animate-draw-line" style={{ animationDelay: '1.5s' }} />
+            <line x1="20%" y1="50%" x2="80%" y2="50%" stroke="var(--border)" strokeWidth="1" strokeDasharray="3,3" />
+          </svg>
 
-          {/* Inner Orbiting Ring (Counter-Rotate) */}
-          <div style={{
-            position: 'absolute', width: 70, height: 70,
-            border: '1px solid rgba(143,175,157,0.2)', borderRadius: '50%',
-            animation: 'orbit-spin 4s linear infinite reverse'
-          }}>
-            <div style={{ position: 'absolute', top: '50%', right: -4, transform: 'translateY(-50%)', width: 8, height: 8, background: 'var(--accent-amber)', borderRadius: '50%', boxShadow: '0 0 8px var(--accent-amber)' }} />
-          </div>
-
-          {/* Central Lens / Core */}
-          <div style={{
-            width: 32, height: 32,
-            background: 'var(--accent-sage)',
-            borderRadius: '50%',
-            animation: 'pulse-lens 2s ease-in-out infinite',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 0 20px rgba(143,175,157,0.5)',
-            position: 'relative'
-          }}>
-             {/* Inner eye / reflection */}
-             <div style={{ position: 'absolute', top: 6, right: 8, width: 6, height: 4, background: 'rgba(255,255,255,0.8)', borderRadius: '50%', transform: 'rotate(-45deg)' }} />
-          </div>
-
+          {/* Nodes */}
+          <div style={{ position: 'absolute', top: '10%', left: '50%', transform: 'translateX(-50%)', width: 14, height: 14, background: 'var(--accent-sage)', borderRadius: '4px', zIndex: 1, boxShadow: '0 0 15px var(--accent-sage)', animation: 'pulse-glow 2s infinite' }} />
+          <div style={{ position: 'absolute', top: '45%', left: '15%', width: 12, height: 12, background: 'var(--accent-terracotta)', borderRadius: '50%', zIndex: 1, boxShadow: '0 0 10px var(--accent-terracotta)', animation: 'pulse-glow 2s infinite 0.5s' }} />
+          <div style={{ position: 'absolute', top: '45%', right: '15%', width: 12, height: 12, background: 'var(--accent-amber)', borderRadius: '50%', zIndex: 1, boxShadow: '0 0 10px var(--accent-amber)', animation: 'pulse-glow 2s infinite 1.5s' }} />
+          <div style={{ position: 'absolute', bottom: '10%', left: '50%', transform: 'translateX(-50%)', width: 14, height: 14, background: 'var(--bg-card)', border: '2px solid var(--accent-sage)', borderRadius: '2px', zIndex: 1, animation: 'pulse-glow 2s infinite 1s' }} />
         </div>
         
         {/* Text & Loading Bar */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
           <div style={{
-            fontSize: 24, fontWeight: 700, color: 'var(--text-primary)',
-            letterSpacing: '-0.03em', fontFamily: 'var(--font-sans)',
+            fontSize: 28, fontWeight: 800, color: 'var(--text-primary)',
+            letterSpacing: '-0.04em', fontFamily: 'var(--font-sans)',
             textShadow: '0 4px 12px rgba(0,0,0,0.05)'
           }}>AlgoLens</div>
           
           <div style={{
-            width: 160, height: 3, background: 'var(--border)',
+            width: 160, height: 4, background: 'var(--border)',
             borderRadius: 4, overflow: 'hidden', position: 'relative',
-            boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)'
           }}>
             <div style={{
               position: 'absolute', top: 0, bottom: 0, left: 0, width: '40%',
-              background: 'linear-gradient(90deg, var(--accent-sage), var(--accent-sage-hover))',
+              background: 'linear-gradient(90deg, var(--accent-sage), var(--accent-amber))',
               animation: traceEngine.isReady ? 'none' : 'sweep 1.2s ease-in-out infinite',
               borderRadius: 4
             }} />
@@ -163,6 +142,20 @@ function InitialLoader() {
         @keyframes sweep {
           0% { transform: translateX(-100%); }
           100% { transform: translateX(300%); }
+        }
+        @keyframes pulse-glow {
+          0% { transform: scale(1); opacity: 0.8; }
+          50% { transform: scale(1.3); opacity: 1; }
+          100% { transform: scale(1); opacity: 0.8; }
+        }
+        .animate-draw-line {
+          stroke-dasharray: 100;
+          animation: draw-line 2s infinite;
+        }
+        @keyframes draw-line {
+          0% { stroke-dashoffset: 100; opacity: 0; }
+          50% { stroke-dashoffset: 0; opacity: 1; }
+          100% { stroke-dashoffset: -100; opacity: 0; }
         }
       `}</style>
     </div>

@@ -1,0 +1,828 @@
+{"metadata": {
+    "algorithm": "Sliding Window",
+    "dataStructure": "HashSet",
+    "timeComplexity": "O(n)",
+    "spaceComplexity": "O(min(n, m))"
+}, "frames": [
+    {
+        "line": 3,
+        "event": "assignment",
+        "codeWithValues": "int left = 0",
+        "explanation": "left pointer",
+        "variables": {
+            "left": {"type": "int", "value": 0},
+            "maxLen": {"type": "int", "value": 0},
+            "s": {"type": "str", "value": "abcabcbb"}
+        },
+        "dataStructureState": {
+            "type": "sliding_window",
+            "name": "s",
+            "pointers": {"left": 0, "right": 0},
+            "window": [0, 0],
+            "highlights": [0]
+        }
+    },
+    {
+        "line": 4,
+        "event": "assignment",
+        "codeWithValues": "HashSet<Character> set = new HashSet<>()",
+        "explanation": "create set",
+        "variables": {
+            "left": {"type": "int", "value": 0},
+            "maxLen": {"type": "int", "value": 0},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {}}
+        },
+        "dataStructureState": {
+            "type": "hashmap",
+            "name": "set",
+            "size": 0
+        }
+    },
+    {
+        "line": 6,
+        "event": "loop_iteration",
+        "codeWithValues": "for (int right = 0; right < 8; right++)",
+        "explanation": "right pointer",
+        "variables": {
+            "left": {"type": "int", "value": 0},
+            "maxLen": {"type": "int", "value": 0},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {}},
+            "right": {"type": "int", "value": 0}
+        },
+        "dataStructureState": {
+            "type": "sliding_window",
+            "name": "s",
+            "pointers": {"left": 0, "right": 0},
+            "window": [0, 0],
+            "highlights": [0]
+        }
+    },
+    {
+        "line": 8,
+        "event": "comparison",
+        "codeWithValues": "while (set.contains('a'))",
+        "explanation": "check 'a'",
+        "variables": {
+            "left": {"type": "int", "value": 0},
+            "maxLen": {"type": "int", "value": 0},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {}},
+            "right": {"type": "int", "value": 0}
+        },
+        "dataStructureState": {
+            "type": "hashmap",
+            "name": "set",
+            "size": 0
+        }
+    },
+    {
+        "line": 10,
+        "event": "assignment",
+        "codeWithValues": "set.add('a')",
+        "explanation": "add 'a'",
+        "variables": {
+            "left": {"type": "int", "value": 0},
+            "maxLen": {"type": "int", "value": 0},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"a": true}},
+            "right": {"type": "int", "value": 0}
+        },
+        "dataStructureState": {
+            "type": "hashmap",
+            "name": "set",
+            "size": 1
+        }
+    },
+    {
+        "line": 11,
+        "event": "assignment",
+        "codeWithValues": "maxLen = Math.max(0, 1)",
+        "explanation": "update maxLen",
+        "variables": {
+            "left": {"type": "int", "value": 0},
+            "maxLen": {"type": "int", "value": 1},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"a": true}},
+            "right": {"type": "int", "value": 0}
+        },
+        "dataStructureState": {
+            "type": "sliding_window",
+            "name": "s",
+            "pointers": {"left": 0, "right": 0},
+            "window": [0, 0],
+            "highlights": [0]
+        }
+    },
+    {
+        "line": 6,
+        "event": "loop_iteration",
+        "codeWithValues": "for (int right = 1; right < 8; right++)",
+        "explanation": "right pointer",
+        "variables": {
+            "left": {"type": "int", "value": 0},
+            "maxLen": {"type": "int", "value": 1},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"a": true}},
+            "right": {"type": "int", "value": 1}
+        },
+        "dataStructureState": {
+            "type": "sliding_window",
+            "name": "s",
+            "pointers": {"left": 0, "right": 1},
+            "window": [0, 1],
+            "highlights": [1]
+        }
+    },
+    {
+        "line": 8,
+        "event": "comparison",
+        "codeWithValues": "while (set.contains('b'))",
+        "explanation": "check 'b'",
+        "variables": {
+            "left": {"type": "int", "value": 0},
+            "maxLen": {"type": "int", "value": 1},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"a": true}},
+            "right": {"type": "int", "value": 1}
+        },
+        "dataStructureState": {
+            "type": "hashmap",
+            "name": "set",
+            "size": 1
+        }
+    },
+    {
+        "line": 10,
+        "event": "assignment",
+        "codeWithValues": "set.add('b')",
+        "explanation": "add 'b'",
+        "variables": {
+            "left": {"type": "int", "value": 0},
+            "maxLen": {"type": "int", "value": 1},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"a": true, "b": true}},
+            "right": {"type": "int", "value": 1}
+        },
+        "dataStructureState": {
+            "type": "hashmap",
+            "name": "set",
+            "size": 2
+        }
+    },
+    {
+        "line": 11,
+        "event": "assignment",
+        "codeWithValues": "maxLen = Math.max(1, 2)",
+        "explanation": "update maxLen",
+        "variables": {
+            "left": {"type": "int", "value": 0},
+            "maxLen": {"type": "int", "value": 2},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"a": true, "b": true}},
+            "right": {"type": "int", "value": 1}
+        },
+        "dataStructureState": {
+            "type": "sliding_window",
+            "name": "s",
+            "pointers": {"left": 0, "right": 1},
+            "window": [0, 1],
+            "highlights": [1]
+        }
+    },
+    {
+        "line": 6,
+        "event": "loop_iteration",
+        "codeWithValues": "for (int right = 2; right < 8; right++)",
+        "explanation": "right pointer",
+        "variables": {
+            "left": {"type": "int", "value": 0},
+            "maxLen": {"type": "int", "value": 2},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"a": true, "b": true}},
+            "right": {"type": "int", "value": 2}
+        },
+        "dataStructureState": {
+            "type": "sliding_window",
+            "name": "s",
+            "pointers": {"left": 0, "right": 2},
+            "window": [0, 2],
+            "highlights": [2]
+        }
+    },
+    {
+        "line": 8,
+        "event": "comparison",
+        "codeWithValues": "while (set.contains('c'))",
+        "explanation": "check 'c'",
+        "variables": {
+            "left": {"type": "int", "value": 0},
+            "maxLen": {"type": "int", "value": 2},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"a": true, "b": true}},
+            "right": {"type": "int", "value": 2}
+        },
+        "dataStructureState": {
+            "type": "hashmap",
+            "name": "set",
+            "size": 2
+        }
+    },
+    {
+        "line": 10,
+        "event": "assignment",
+        "codeWithValues": "set.add('c')",
+        "explanation": "add 'c'",
+        "variables": {
+            "left": {"type": "int", "value": 0},
+            "maxLen": {"type": "int", "value": 2},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"a": true, "b": true, "c": true}},
+            "right": {"type": "int", "value": 2}
+        },
+        "dataStructureState": {
+            "type": "hashmap",
+            "name": "set",
+            "size": 3
+        }
+    },
+    {
+        "line": 11,
+        "event": "assignment",
+        "codeWithValues": "maxLen = Math.max(2, 3)",
+        "explanation": "update maxLen",
+        "variables": {
+            "left": {"type": "int", "value": 0},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"a": true, "b": true, "c": true}},
+            "right": {"type": "int", "value": 2}
+        },
+        "dataStructureState": {
+            "type": "sliding_window",
+            "name": "s",
+            "pointers": {"left": 0, "right": 2},
+            "window": [0, 2],
+            "highlights": [2]
+        }
+    },
+    {
+        "line": 6,
+        "event": "loop_iteration",
+        "codeWithValues": "for (int right = 3; right < 8; right++)",
+        "explanation": "right pointer",
+        "variables": {
+            "left": {"type": "int", "value": 0},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"a": true, "b": true, "c": true}},
+            "right": {"type": "int", "value": 3}
+        },
+        "dataStructureState": {
+            "type": "sliding_window",
+            "name": "s",
+            "pointers": {"left": 0, "right": 3},
+            "window": [0, 3],
+            "highlights": [3]
+        }
+    },
+    {
+        "line": 8,
+        "event": "comparison",
+        "codeWithValues": "while (set.contains('a'))",
+        "explanation": "check 'a'",
+        "variables": {
+            "left": {"type": "int", "value": 0},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"a": true, "b": true, "c": true}},
+            "right": {"type": "int", "value": 3}
+        },
+        "dataStructureState": {
+            "type": "hashmap",
+            "name": "set",
+            "size": 3
+        }
+    },
+    {
+        "line": 9,
+        "event": "assignment",
+        "codeWithValues": "set.remove('a')",
+        "explanation": "remove 'a'",
+        "variables": {
+            "left": {"type": "int", "value": 0},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"b": true, "c": true}},
+            "right": {"type": "int", "value": 3}
+        },
+        "dataStructureState": {
+            "type": "hashmap",
+            "name": "set",
+            "size": 2
+        }
+    },
+    {
+        "line": 10,
+        "event": "assignment",
+        "codeWithValues": "set.add('a')",
+        "explanation": "add 'a'",
+        "variables": {
+            "left": {"type": "int", "value": 1},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"b": true, "c": true, "a": true}},
+            "right": {"type": "int", "value": 3}
+        },
+        "dataStructureState": {
+            "type": "hashmap",
+            "name": "set",
+            "size": 3
+        }
+    },
+    {
+        "line": 11,
+        "event": "assignment",
+        "codeWithValues": "maxLen = Math.max(3, 3)",
+        "explanation": "update maxLen",
+        "variables": {
+            "left": {"type": "int", "value": 1},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"b": true, "c": true, "a": true}},
+            "right": {"type": "int", "value": 3}
+        },
+        "dataStructureState": {
+            "type": "sliding_window",
+            "name": "s",
+            "pointers": {"left": 1, "right": 3},
+            "window": [1, 3],
+            "highlights": [3]
+        }
+    },
+    {
+        "line": 6,
+        "event": "loop_iteration",
+        "codeWithValues": "for (int right = 4; right < 8; right++)",
+        "explanation": "right pointer",
+        "variables": {
+            "left": {"type": "int", "value": 1},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"b": true, "c": true, "a": true}},
+            "right": {"type": "int", "value": 4}
+        },
+        "dataStructureState": {
+            "type": "sliding_window",
+            "name": "s",
+            "pointers": {"left": 1, "right": 4},
+            "window": [1, 4],
+            "highlights": [4]
+        }
+    },
+    {
+        "line": 8,
+        "event": "comparison",
+        "codeWithValues": "while (set.contains('b'))",
+        "explanation": "check 'b'",
+        "variables": {
+            "left": {"type": "int", "value": 1},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"b": true, "c": true, "a": true}},
+            "right": {"type": "int", "value": 4}
+        },
+        "dataStructureState": {
+            "type": "hashmap",
+            "name": "set",
+            "size": 3
+        }
+    },
+    {
+        "line": 9,
+        "event": "assignment",
+        "codeWithValues": "set.remove('b')",
+        "explanation": "remove 'b'",
+        "variables": {
+            "left": {"type": "int", "value": 1},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"c": true, "a": true}},
+            "right": {"type": "int", "value": 4}
+        },
+        "dataStructureState": {
+            "type": "hashmap",
+            "name": "set",
+            "size": 2
+        }
+    },
+    {
+        "line": 9,
+        "event": "assignment",
+        "codeWithValues": "left++",
+        "explanation": "left pointer",
+        "variables": {
+            "left": {"type": "int", "value": 2},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"c": true, "a": true}},
+            "right": {"type": "int", "value": 4}
+        },
+        "dataStructureState": {
+            "type": "sliding_window",
+            "name": "s",
+            "pointers": {"left": 2, "right": 4},
+            "window": [2, 4],
+            "highlights": [4]
+        }
+    },
+    {
+        "line": 10,
+        "event": "assignment",
+        "codeWithValues": "set.add('b')",
+        "explanation": "add 'b'",
+        "variables": {
+            "left": {"type": "int", "value": 2},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"c": true, "a": true, "b": true}},
+            "right": {"type": "int", "value": 4}
+        },
+        "dataStructureState": {
+            "type": "hashmap",
+            "name": "set",
+            "size": 3
+        }
+    },
+    {
+        "line": 11,
+        "event": "assignment",
+        "codeWithValues": "maxLen = Math.max(3, 3)",
+        "explanation": "update maxLen",
+        "variables": {
+            "left": {"type": "int", "value": 2},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"c": true, "a": true, "b": true}},
+            "right": {"type": "int", "value": 4}
+        },
+        "dataStructureState": {
+            "type": "sliding_window",
+            "name": "s",
+            "pointers": {"left": 2, "right": 4},
+            "window": [2, 4],
+            "highlights": [4]
+        }
+    },
+    {
+        "line": 6,
+        "event": "loop_iteration",
+        "codeWithValues": "for (int right = 5; right < 8; right++)",
+        "explanation": "right pointer",
+        "variables": {
+            "left": {"type": "int", "value": 2},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"c": true, "a": true, "b": true}},
+            "right": {"type": "int", "value": 5}
+        },
+        "dataStructureState": {
+            "type": "sliding_window",
+            "name": "s",
+            "pointers": {"left": 2, "right": 5},
+            "window": [2, 5],
+            "highlights": [5]
+        }
+    },
+    {
+        "line": 8,
+        "event": "comparison",
+        "codeWithValues": "while (set.contains('c'))",
+        "explanation": "check 'c'",
+        "variables": {
+            "left": {"type": "int", "value": 2},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"c": true, "a": true, "b": true}},
+            "right": {"type": "int", "value": 5}
+        },
+        "dataStructureState": {
+            "type": "hashmap",
+            "name": "set",
+            "size": 3
+        }
+    },
+    {
+        "line": 9,
+        "event": "assignment",
+        "codeWithValues": "set.remove('c')",
+        "explanation": "remove 'c'",
+        "variables": {
+            "left": {"type": "int", "value": 2},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"a": true, "b": true}},
+            "right": {"type": "int", "value": 5}
+        },
+        "dataStructureState": {
+            "type": "hashmap",
+            "name": "set",
+            "size": 2
+        }
+    },
+    {
+        "line": 9,
+        "event": "assignment",
+        "codeWithValues": "left++",
+        "explanation": "left pointer",
+        "variables": {
+            "left": {"type": "int", "value": 3},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"a": true, "b": true}},
+            "right": {"type": "int", "value": 5}
+        },
+        "dataStructureState": {
+            "type": "sliding_window",
+            "name": "s",
+            "pointers": {"left": 3, "right": 5},
+            "window": [3, 5],
+            "highlights": [5]
+        }
+    },
+    {
+        "line": 10,
+        "event": "assignment",
+        "codeWithValues": "set.add('c')",
+        "explanation": "add 'c'",
+        "variables": {
+            "left": {"type": "int", "value": 3},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"a": true, "b": true, "c": true}},
+            "right": {"type": "int", "value": 5}
+        },
+        "dataStructureState": {
+            "type": "hashmap",
+            "name": "set",
+            "size": 3
+        }
+    },
+    {
+        "line": 11,
+        "event": "assignment",
+        "codeWithValues": "maxLen = Math.max(3, 3)",
+        "explanation": "update maxLen",
+        "variables": {
+            "left": {"type": "int", "value": 3},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"a": true, "b": true, "c": true}},
+            "right": {"type": "int", "value": 5}
+        },
+        "dataStructureState": {
+            "type": "sliding_window",
+            "name": "s",
+            "pointers": {"left": 3, "right": 5},
+            "window": [3, 5],
+            "highlights": [5]
+        }
+    },
+    {
+        "line": 6,
+        "event": "loop_iteration",
+        "codeWithValues": "for (int right = 6; right < 8; right++)",
+        "explanation": "right pointer",
+        "variables": {
+            "left": {"type": "int", "value": 3},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"a": true, "b": true, "c": true}},
+            "right": {"type": "int", "value": 6}
+        },
+        "dataStructureState": {
+            "type": "sliding_window",
+            "name": "s",
+            "pointers": {"left": 3, "right": 6},
+            "window": [3, 6],
+            "highlights": [6]
+        }
+    },
+    {
+        "line": 8,
+        "event": "comparison",
+        "codeWithValues": "while (set.contains('a'))",
+        "explanation": "check 'a'",
+        "variables": {
+            "left": {"type": "int", "value": 3},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"a": true, "b": true, "c": true}},
+            "right": {"type": "int", "value": 6}
+        },
+        "dataStructureState": {
+            "type": "hashmap",
+            "name": "set",
+            "size": 3
+        }
+    },
+    {
+        "line": 9,
+        "event": "assignment",
+        "codeWithValues": "set.remove('a')",
+        "explanation": "remove 'a'",
+        "variables": {
+            "left": {"type": "int", "value": 3},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"b": true, "c": true}},
+            "right": {"type": "int", "value": 6}
+        },
+        "dataStructureState": {
+            "type": "hashmap",
+            "name": "set",
+            "size": 2
+        }
+    },
+    {
+        "line": 9,
+        "event": "assignment",
+        "codeWithValues": "left++",
+        "explanation": "left pointer",
+        "variables": {
+            "left": {"type": "int", "value": 4},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"b": true, "c": true}},
+            "right": {"type": "int", "value": 6}
+        },
+        "dataStructureState": {
+            "type": "sliding_window",
+            "name": "s",
+            "pointers": {"left": 4, "right": 6},
+            "window": [4, 6],
+            "highlights": [6]
+        }
+    },
+    {
+        "line": 10,
+        "event": "assignment",
+        "codeWithValues": "set.add('a')",
+        "explanation": "add 'a'",
+        "variables": {
+            "left": {"type": "int", "value": 4},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"b": true, "c": true, "a": true}},
+            "right": {"type": "int", "value": 6}
+        },
+        "dataStructureState": {
+            "type": "hashmap",
+            "name": "set",
+            "size": 3
+        }
+    },
+    {
+        "line": 11,
+        "event": "assignment",
+        "codeWithValues": "maxLen = Math.max(3, 3)",
+        "explanation": "update maxLen",
+        "variables": {
+            "left": {"type": "int", "value": 4},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"b": true, "c": true, "a": true}},
+            "right": {"type": "int", "value": 6}
+        },
+        "dataStructureState": {
+            "type": "sliding_window",
+            "name": "s",
+            "pointers": {"left": 4, "right": 6},
+            "window": [4, 6],
+            "highlights": [6]
+        }
+    },
+    {
+        "line": 6,
+        "event": "loop_iteration",
+        "codeWithValues": "for (int right = 7; right < 8; right++)",
+        "explanation": "right pointer",
+        "variables": {
+            "left": {"type": "int", "value": 4},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"b": true, "c": true, "a": true}},
+            "right": {"type": "int", "value": 7}
+        },
+        "dataStructureState": {
+            "type": "sliding_window",
+            "name": "s",
+            "pointers": {"left": 4, "right": 7},
+            "window": [4, 7],
+            "highlights": [7]
+        }
+    },
+    {
+        "line": 8,
+        "event": "comparison",
+        "codeWithValues": "while (set.contains('b'))",
+        "explanation": "check 'b'",
+        "variables": {
+            "left": {"type": "int", "value": 4},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"b": true, "c": true, "a": true}},
+            "right": {"type": "int", "value": 7}
+        },
+        "dataStructureState": {
+            "type": "hashmap",
+            "name": "set",
+            "size": 3
+        }
+    },
+    {
+        "line": 9,
+        "event": "assignment",
+        "codeWithValues": "set.remove('b')",
+        "explanation": "remove 'b'",
+        "variables": {
+            "left": {"type": "int", "value": 4},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"c": true, "a": true}},
+            "right": {"type": "int", "value": 7}
+        },
+        "dataStructureState": {
+            "type": "hashmap",
+            "name": "set",
+            "size": 2
+        }
+    },
+    {
+        "line": 9,
+        "event": "assignment",
+        "codeWithValues": "left++",
+        "explanation": "left pointer",
+        "variables": {
+            "left": {"type": "int", "value": 5},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"c": true, "a": true}},
+            "right": {"type": "int", "value": 7}
+        },
+        "dataStructureState": {
+            "type": "sliding_window",
+            "name": "s",
+            "pointers": {"left": 5, "right": 7},
+            "window": [5, 7],
+            "highlights": [7]
+        }
+    },
+    {
+        "line": 10,
+        "event": "assignment",
+        "codeWithValues": "set.add('b')",
+        "explanation": "add 'b'",
+        "variables": {
+            "left": {"type": "int", "value": 5},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"c": true, "a": true, "b": true}},
+            "right": {"type": "int", "value": 7}
+        },
+        "dataStructureState": {
+            "type": "hashmap",
+            "name": "set",
+            "size": 3
+        }
+    },
+    {
+        "line": 11,
+        "event": "assignment",
+        "codeWithValues": "maxLen = Math.max(3, 3)",
+        "explanation": "update maxLen",
+        "variables": {
+            "left": {"type": "int", "value": 5},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb"},
+            "set": {"type": "hashmap", "value": {"c": true, "a": true, "b": true}},
+            "right": {"type": "int", "value": 7}
+        },
+        "dataStructureState": {
+            "type": "sliding_window",
+            "name": "s",
+            "pointers": {"left": 5, "right": 7},
+            "window": [5, 7],
+            "highlights": [7]
+        }
+    },
+    {
+        "line": 13,
+        "event": "return",
+        "codeWithValues": "return maxLen",
+        "explanation": "return maxLen",
+        "variables": {
+            "left": {"type": "int", "value": 5},
+            "maxLen": {"type": "int", "value": 3},
+            "s": {"type": "str", "value": "abcabcbb
