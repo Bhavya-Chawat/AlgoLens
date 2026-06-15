@@ -389,12 +389,31 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
   const callTree = useMemo(() => {
     // 1. Try AI-provided recursion tree first
     if (frame && frame.recursionTree && frame.recursionTree.nodes && frame.recursionTree.nodes.length > 0) {
-      const nodes = frame.recursionTree.nodes.map(n => ({
-        ...n,
-        isActive: n.status === 'active',
-        done: n.status === 'done',
-        children: frame.recursionTree.nodes.filter(child => child.parentId === n.id).map(c => c.id)
-      }));
+      const rawNodes = frame.recursionTree.nodes;
+      const getDepth = (id) => {
+        let depth = 0;
+        let curr = rawNodes.find(n => n.id === id);
+        let visited = new Set();
+        while (curr && curr.parentId !== null && curr.parentId !== undefined && !visited.has(curr.id)) {
+          visited.add(curr.id);
+          depth++;
+          curr = rawNodes.find(n => n.id === curr.parentId);
+        }
+        return depth;
+      };
+
+      const nodes = rawNodes.map(n => {
+        const match = (n.label || '').match(/^([^(]+)\((.*)\)$/);
+        return {
+          ...n,
+          name: match ? match[1] : (n.label || 'func'),
+          description: match ? match[2] : '',
+          depth: getDepth(n.id),
+          isActive: n.status === 'active',
+          done: n.status === 'done',
+          children: rawNodes.filter(child => child.parentId === n.id).map(c => c.id)
+        };
+      });
       const roots = nodes.filter(n => n.parentId === null);
       if (nodes.length > 0) {
         const dims = layoutTree(nodes, roots);
@@ -543,7 +562,7 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
           }}
         >{/* ── BADGES: Event / Algo / DS ── */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
-          <EventBadge type={frame.eventType} />
+          <EventBadge type={frame.event || frame.eventType} />
           <span style={{
             fontSize: 11, fontFamily: 'var(--font-mono)',
             color: 'var(--canvas-text-muted)', padding: '2px 6px',
@@ -626,8 +645,8 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
           </Section>
         )}
 
-        {/* ── ARRAY + POINTERS ── */}
-        {(detected.type === 'array' || detected.type === 'array_hashmap' || detected.type === 'recursion') &&
+        {/* ── ARRAY / STRING / SET + POINTERS ── */}
+        {(['array', 'sliding_window', 'array_hashmap', 'recursion', 'set'].includes(detected.type)) &&
           detected.mainArray && (
             <Section label={`Array — ${detected.mainArray.name}`}>
               <ArrayVisualizer
@@ -707,8 +726,8 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
           </Section>
         )}
 
-        {/* ── HASHMAP ── */}
-        {(detected.type === 'hashmap' || detected.type === 'array_hashmap') &&
+        {/* ── HASHMAP / SET ── */}
+        {(['hashmap', 'array_hashmap', 'set'].includes(detected.type)) &&
           detected.hashmaps.length > 0 && (
             <Section label="Hash Map">
               <HashMapVisualizer
@@ -847,13 +866,18 @@ function ScalarRow({ vars }) {
 // ============================================================
 const EVENT_BADGE_CONFIG = {
   function_call: { label: 'call',       bg: 'rgba(167,139,250,0.15)', text: '#7C3AED', border: 'rgba(167,139,250,0.35)' },
-  assignment:    { label: 'assign',     bg: 'rgba(143,175,157,0.15)', text: '#2E6B50', border: 'rgba(143,175,157,0.35)' },
+  loop_iteration:{ label: 'loop',       bg: 'rgba(231,195,106,0.15)', text: '#8C6A14', border: 'rgba(231,195,106,0.35)' },
   comparison:    { label: 'compare',    bg: 'rgba(126,184,212,0.15)', text: '#1E6480', border: 'rgba(126,184,212,0.35)' },
+  assignment:    { label: 'assign',     bg: 'rgba(143,175,157,0.15)', text: '#2E6B50', border: 'rgba(143,175,157,0.35)' },
+  return:        { label: 'return',     bg: 'rgba(16,185,129,0.12)',  text: '#065F46', border: 'rgba(16,185,129,0.35)' },
+  branch_true:   { label: 'branch_T',   bg: 'rgba(212,155,132,0.15)', text: '#8B4A2C', border: 'rgba(212,155,132,0.35)' },
+  branch_false:  { label: 'branch_F',   bg: 'rgba(212,155,132,0.15)', text: '#8B4A2C', border: 'rgba(212,155,132,0.35)' },
+  swap:          { label: 'swap',       bg: 'rgba(231,195,106,0.15)', text: '#8C6A14', border: 'rgba(231,195,106,0.35)' },
+  recurse:       { label: 'recurse',    bg: 'rgba(167,139,250,0.15)', text: '#7C3AED', border: 'rgba(167,139,250,0.35)' },
+  base_case:     { label: 'base_case',  bg: 'rgba(16,185,129,0.12)',  text: '#065F46', border: 'rgba(16,185,129,0.35)' },
   loop_start:    { label: 'loop',       bg: 'rgba(231,195,106,0.15)', text: '#8C6A14', border: 'rgba(231,195,106,0.35)' },
   branch:        { label: 'branch',     bg: 'rgba(212,155,132,0.15)', text: '#8B4A2C', border: 'rgba(212,155,132,0.35)' },
-  return:        { label: 'return',     bg: 'rgba(16,185,129,0.12)',  text: '#065F46', border: 'rgba(16,185,129,0.35)' },
   exception:     { label: 'exception',  bg: 'rgba(224,82,82,0.12)',   text: '#9B1C1C', border: 'rgba(224,82,82,0.3)'  },
-  swap:          { label: 'swap',       bg: 'rgba(231,195,106,0.15)', text: '#8C6A14', border: 'rgba(231,195,106,0.35)' },
   bitwise:       { label: 'bitwise',    bg: 'rgba(126,184,212,0.15)', text: '#1E6480', border: 'rgba(126,184,212,0.35)' },
   line:          { label: 'line',       bg: 'rgba(156,163,175,0.12)', text: '#374151', border: 'rgba(156,163,175,0.3)' },
 };

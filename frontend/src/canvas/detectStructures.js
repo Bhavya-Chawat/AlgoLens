@@ -122,6 +122,11 @@ export function detectStructures(frame) {
   const output = { mainArray, arrays, stacks, queues, graphs, hashmaps, linkedLists, trees, pointers, integers, vars };
 
   // ─── Choose visualizer mode ────────────────────────────────
+  const aiType = frame?.dataStructureState?.type;
+  if (aiType && aiType !== 'generic' && aiType !== 'empty') {
+    return { type: aiType, ...output };
+  }
+
   if (hasRecursion) {
     return { type: 'recursion', ...output };
   }
@@ -167,21 +172,34 @@ export function buildCallTree(trace, maxFrame) {
   for (let i = 0; i <= limit; i++) {
     const frame = trace[i];
 
-    if (frame.eventType === 'function_call') {
+    if (frame.event === 'function_call' || frame.eventType === 'function_call') {
       const cs   = frame.callStack || [];
       const last = cs[cs.length - 1] || {};
 
+      let funcName = last.name;
+      let argsDesc = '';
+      if (!funcName) {
+         // try extracting from codeWithValues e.g. "int d = maxDepth(root.right)"
+         const match = (frame.codeWithValues || '').match(/([a-zA-Z_]\w*)\s*\((.*)\)/);
+         if (match) {
+           funcName = match[1];
+           argsDesc = match[2];
+         } else {
+           funcName = 'func';
+         }
+      }
+
       const node = {
         id:          nodes.length,
-        name:        last.name ?? '?',
-        depth:       cs.length - 1,
+        name:        funcName,
+        depth:       cs.length > 0 ? cs.length - 1 : openStack.length,
         children:    [],
         parentId:    openStack.length > 0 ? openStack[openStack.length - 1] : null,
         returnValue: null,
         done:        false,
         isActive:    false,
         frameIdx:    i,
-        description: frame.description,
+        description: argsDesc || frame.explanation || frame.description || '',
       };
 
       if (node.parentId !== null) {
@@ -191,9 +209,9 @@ export function buildCallTree(trace, maxFrame) {
       openStack.push(node.id);
     }
 
-    if (frame.eventType === 'return' && openStack.length > 0) {
+    if ((frame.event === 'return' || frame.eventType === 'return') && openStack.length > 0) {
       const topIdx = openStack[openStack.length - 1];
-      nodes[topIdx].returnValue = frame.description.replace('↩ ', '').replace('return ', '');
+      nodes[topIdx].returnValue = (frame.explanation || frame.description || '').replace('↩ ', '').replace('return ', '');
       nodes[topIdx].done        = true;
       openStack.pop();
     }
@@ -210,8 +228,8 @@ export function buildCallTree(trace, maxFrame) {
 
 // Compute SVG layout positions for tree nodes
 export function layoutTree(nodes, roots) {
-  const NW = 148; // node width
-  const NH = 44;  // node height
+  const NW = 180; // node width
+  const NH = 52;  // node height
   const VG = 56;  // vertical gap
   const HG = 14;  // horizontal gap
 

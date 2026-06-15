@@ -192,7 +192,7 @@ function ArrayVisualizer({ mainArray, pointers, isBugFrame, prevVars }) {
             borderRadius: 8,
             pointerEvents: 'none',
             zIndex: 10,
-            transition: 'all 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+            transition: 'all 250ms ease',
           }}>
             <div style={{ position: 'absolute', top: -20, left: '50%', transform: 'translateX(-50%)', background: 'var(--accent-sage)', color: 'white', fontSize: 9, fontFamily: 'var(--font-mono)', padding: '2px 6px', borderRadius: 10, fontWeight: 700 }}>WINDOW</div>
           </div>
@@ -220,7 +220,7 @@ function ArrayVisualizer({ mainArray, pointers, isBugFrame, prevVars }) {
                            : changed ? 'rgba(231,195,106,0.28)'
                            : active  ? 'rgba(231,195,106,0.10)'
                            : 'var(--bg-card)',
-                transition: 'background 220ms ease',
+                transition: 'background 250ms ease',
                 boxShadow: active && !isBug ? 'inset 0 0 0 1.5px rgba(231,195,106,0.6)' : 'none',
                 borderRadius: i === 0 ? '6px 0 0 6px' : i === n - 1 ? '0 6px 6px 0' : 0,
               }}
@@ -240,7 +240,7 @@ function ArrayVisualizer({ mainArray, pointers, isBugFrame, prevVars }) {
                       : changed ? '#B08A30'
                       : active  ? '#8C6D1A'
                       : 'var(--canvas-text-primary)',
-                transition: 'color 220ms ease',
+                transition: 'color 250ms ease',
                 lineHeight: 1,
               }}>
                 {String(val).length > 6 ? String(val).slice(0, 5) + '…' : String(val)}
@@ -286,7 +286,7 @@ function ArrayVisualizer({ mainArray, pointers, isBugFrame, prevVars }) {
                 key={pname}
                 style={{
                   transform: `translateX(${cx}px)`,
-                  transition: 'transform 300ms cubic-bezier(0.4,0,0.2,1)',
+                  transition: 'transform 250ms ease',
                 }}
               >
                 {/* Vertical stem */}
@@ -411,7 +411,7 @@ function HashMapVisualizer({ hashmaps, prevVars }) {
                                 : 'transparent',
                       borderLeft: isNew || valChanged ? '2px solid var(--accent-amber)' : '2px solid transparent',
                       animation: isNew ? 'fadeIn 250ms ease forwards' : 'none',
-                      transition: 'background 220ms ease',
+                      transition: 'background 250ms ease',
                     }}
                   >
                     {/* Key */}
@@ -429,7 +429,7 @@ function HashMapVisualizer({ hashmaps, prevVars }) {
                       fontFamily: 'var(--font-mono)', fontSize: 12,
                       color: valChanged ? '#B08A30' : 'var(--canvas-text-primary)',
                       fontWeight: valChanged ? 600 : 400,
-                      transition: 'color 220ms ease',
+                      transition: 'color 250ms ease',
                     }}>
                       {String(val).length > 30 ? String(val).slice(0, 28) + '…' : String(val)}
                     </div>
@@ -561,7 +561,7 @@ function GenericBoard({ vars, isBitwise = false }) {
               borderRadius: 10,
               borderLeft: changed ? '3px solid var(--accent-sage)' : '1px solid var(--border)',
               boxShadow: changed ? '0 0 0 2px rgba(143,175,157,0.18)' : 'none',
-              transition: 'all 220ms ease',
+              transition: 'all 250ms ease',
             }}
           >
             <div style={{
@@ -578,7 +578,7 @@ function GenericBoard({ vars, isBitwise = false }) {
               color: changed ? 'var(--accent-amber)' : 'var(--canvas-text-primary)',
               wordBreak: 'break-all',
               lineHeight: 1.3,
-              transition: 'color 220ms ease',
+              transition: 'color 250ms ease',
             }}>
               {valStr}
             </div>
@@ -638,7 +638,7 @@ function RecursionTreeViz({ nodes, roots, layoutDims }) {
       width={svgW}
       height={svgH}
       viewBox={`${minX - PAD} ${minY - PAD} ${svgW} ${svgH}`}
-      style={{ overflow: 'visible', maxWidth: '100%', height: 'auto' }}
+      style={{ overflow: 'visible', minWidth: svgW, minHeight: svgH }}
     >
       {/* Connection lines */}
       {nodes.map((n) => {
@@ -664,12 +664,12 @@ function RecursionTreeViz({ nodes, roots, layoutDims }) {
       {/* Nodes */}
       {nodes.map((n) => {
         if (n.x === undefined) return null;
-        const depth   = Math.min(n.depth, 3);
+        const depth   = Math.max(0, Math.min(n.depth || 0, 3));
         const colors  = [
-          { fill: '#EDF5F0', stroke: '#8FAF9D', text: '#2E6B50' }, // sage
-          { fill: '#FBF0EB', stroke: '#D49B84', text: '#8B4A2C' }, // terracotta
-          { fill: '#FBF6E8', stroke: '#E7C36A', text: '#8C6A14' }, // amber
-          { fill: '#F3F4F6', stroke: '#9CA3AF', text: '#374151' }, // gray
+          { fill: 'rgba(143,175,157,0.18)', stroke: '#8FAF9D', text: 'var(--canvas-text-primary)' }, // sage
+          { fill: 'rgba(212,155,132,0.18)', stroke: '#D49B84', text: 'var(--canvas-text-primary)' }, // terracotta
+          { fill: 'rgba(231,195,106,0.18)', stroke: '#E7C36A', text: 'var(--canvas-text-primary)' }, // amber
+          { fill: 'rgba(126,184,212,0.18)', stroke: '#7EB8D4', text: 'var(--canvas-text-primary)' }, // sky
         ];
         const c = colors[depth];
 
@@ -692,11 +692,11 @@ function RecursionTreeViz({ nodes, roots, layoutDims }) {
             {/* Function name */}
             <text
               x={n.x + NW / 2}
-              y={n.y + 15}
+              y={n.y + 20}
               textAnchor="middle"
-              fontSize={10}
+              fontSize={11}
               fontFamily="var(--font-mono)"
-              fontWeight={600}
+              fontWeight={700}
               fill={c.text}
             >
               {n.name}
@@ -705,35 +705,39 @@ function RecursionTreeViz({ nodes, roots, layoutDims }) {
             {/* Args */}
             <text
               x={n.x + NW / 2}
-              y={n.y + 30}
+              y={n.y + 36}
               textAnchor="middle"
               fontSize={9}
               fontFamily="var(--font-mono)"
-              fill={c.text}
-              opacity={0.7}
+              fill="var(--canvas-text-muted)"
+              opacity={0.85}
             >
-              {String(n.description).slice(0, 22)}
+              {String(n.description).slice(0, 34)}
             </text>
 
             {/* Return value badge */}
-            {n.done && n.returnValue && (
-              <g>
-                <rect
-                  x={n.x + NW + 4} y={n.y + NH / 2 - 10}
-                  width={Math.min(n.returnValue.length * 7 + 12, 90)} height={20} rx={10}
-                  fill={c.stroke} opacity={0.85}
-                />
-                <text
-                  x={n.x + NW + 4 + Math.min(n.returnValue.length * 7 + 12, 90) / 2}
-                  y={n.y + NH / 2 + 4}
-                  textAnchor="middle"
-                  fontSize={9} fontFamily="var(--font-mono)"
-                  fill="#fff" fontWeight={600}
-                >
-                  {n.returnValue.slice(0, 12)}
-                </text>
-              </g>
-            )}
+            {n.done && n.returnValue !== undefined && n.returnValue !== null && (() => {
+              const str = String(n.returnValue).slice(0, 18);
+              const bw = Math.min(str.length * 7 + 16, 120);
+              return (
+                <g>
+                  <rect
+                    x={n.x + NW / 2 - bw / 2} y={n.y + NH - 10}
+                    width={bw} height={20} rx={10}
+                    fill={c.stroke} opacity={0.95}
+                  />
+                  <text
+                    x={n.x + NW / 2}
+                    y={n.y + NH + 4}
+                    textAnchor="middle"
+                    fontSize={10} fontFamily="var(--font-mono)"
+                    fill="#fff" fontWeight={600}
+                  >
+                    {str}
+                  </text>
+                </g>
+              );
+            })()}
           </g>
         );
       })}
@@ -860,7 +864,7 @@ function LinkedListVisualizer({ listData, pointers, prevVars }) {
                   background: bg,
                   opacity: opacity,
                   transform: `scale(${scale})`,
-                  transition: 'all 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+                  transition: 'all 250ms ease',
                   position: 'relative'
                 }}>
                   <span style={{
@@ -1108,7 +1112,7 @@ function TreeVisualizer({ treeData, pointers, prevVars, vars = {} }) {
               <g 
                 key={i} 
                 transform={`translate(${n.x + shiftX}, ${n.y + 24})`}
-                style={{ transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)' }}
+                style={{ transition: 'transform 250ms ease' }}
               >
                 {/* Outer highlighting ring if pointed to */}
                 {(isPointed || hl === 'active') && (
@@ -1118,7 +1122,6 @@ function TreeVisualizer({ treeData, pointers, prevVars, vars = {} }) {
                     stroke={hl === 'active' ? 'var(--accent-amber)' : ptrColor} 
                     strokeWidth={2} 
                     strokeDasharray="4,3"
-                    style={{ transformBox: 'fill-box', transformOrigin: 'center' }}
                   />
                 )}
 
@@ -1129,7 +1132,7 @@ function TreeVisualizer({ treeData, pointers, prevVars, vars = {} }) {
                   stroke={borderColor} 
                   strokeWidth={isPointed || hl === 'active' ? 2.5 : 1.5} 
                   filter="url(#node-shadow)"
-                  style={{ transition: 'all 220ms ease', transform: `scale(${scale})`, transformOrigin: 'center' }}
+                  style={{ transition: 'all 250ms ease', transform: `scale(${scale})` }}
                 />
 
                 {/* Value */}
@@ -1140,7 +1143,7 @@ function TreeVisualizer({ treeData, pointers, prevVars, vars = {} }) {
                   fontFamily="var(--font-mono)" 
                   fontWeight={600}
                   fill={textColor}
-                  style={{ transition: 'fill 220ms ease', transform: `scale(${scale})`, transformOrigin: 'center' }}
+                  style={{ transition: 'fill 250ms ease', transform: `scale(${scale})` }}
                 >
                   {String(n.val).slice(0, 3)}
                 </text>
