@@ -29,7 +29,117 @@ function generateDriver(language, code, testInput) {
     if (match) methodName = match[1];
     if (methodName) {
       const args = argsToPass.map(i => JSON.stringify(i).replace(/\[/g, '{').replace(/\]/g, '}')).join(', ');
-      driver = `\n\n// AUTO-GENERATED DRIVER\npublic class Main {\n    public static void main(String[] args) {\n        Solution sol = new Solution();\n        Object result = sol.${methodName}(${args});\n        System.out.println(result);\n    }\n}\n`;
+      
+      let extraClasses = "";
+      if (code.includes("TreeNode") && !code.match(/^class TreeNode/m)) {
+        extraClasses += `
+class TreeNode {
+    int val;
+    TreeNode left;
+    TreeNode right;
+    TreeNode() {}
+    TreeNode(int val) { this.val = val; }
+    TreeNode(int val, TreeNode left, TreeNode right) {
+        this.val = val;
+        this.left = left;
+        this.right = right;
+    }
+}
+`;
+      }
+      if (code.includes("ListNode") && !code.match(/^class ListNode/m)) {
+        extraClasses += `
+class ListNode {
+    int val;
+    ListNode next;
+    ListNode() {}
+    ListNode(int val) { this.val = val; }
+    ListNode(int val, ListNode next) { this.val = val; this.next = next; }
+}
+`;
+      }
+
+      const traceCollectorCode = `
+class TraceCollector {
+    public static Object globalTree = null;
+    private StringBuilder sb = new StringBuilder();
+    private boolean first = true;
+    public TraceCollector() { sb.append("{\\"frames\\":["); }
+    public void addFrame(int line, String event, String codeWithValues, String explanation, String variablesJson, String dsStateJson) {
+        if (!first) sb.append(",");
+        first = false;
+        String vars = variablesJson != null && !variablesJson.isEmpty() ? variablesJson : "{}";
+        if (globalTree != null) {
+            if (vars.equals("{}")) {
+                vars = "{\\"fullTree\\":" + toJson(globalTree) + "}";
+            } else {
+                vars = vars.substring(0, vars.length() - 1) + ",\\"fullTree\\":" + toJson(globalTree) + "}";
+            }
+        }
+        sb.append("{")
+          .append("\\"line\\":").append(line).append(",")
+          .append("\\"event\\":\\"").append(event).append("\\",")
+          .append("\\"codeWithValues\\":").append(escape(codeWithValues)).append(",")
+          .append("\\"explanation\\":").append(escape(explanation)).append(",")
+          .append("\\"variables\\":").append(vars).append(",")
+          .append("\\"dataStructureState\\":").append(dsStateJson != null && !dsStateJson.isEmpty() ? dsStateJson : "{}").append(",")
+          .append("\\"callStack\\":").append(getCallStack())
+          .append("}");
+    }
+    public void print(String resultStr) {
+        sb.append("],\\"result\\":").append(resultStr != null ? escape(resultStr) : "null").append("}");
+        System.out.println(sb.toString());
+    }
+    public String escape(String s) {
+        if (s == null) return "null";
+        return "\\"" + s.replace("\\\\", "\\\\\\\\").replace("\\"", "\\\\\\"").replace("\\n", "\\\\n") + "\\"";
+    }
+    public String getCallStack() {
+        StackTraceElement[] st = Thread.currentThread().getStackTrace();
+        StringBuilder cs = new StringBuilder("[");
+        boolean cFirst = true;
+        for (int i = st.length - 1; i >= 0; i--) {
+            String name = st[i].getMethodName();
+            if (name.equals("getStackTrace") || name.equals("getCallStack") || name.equals("addFrame") || name.equals("main") || name.equals("invoke0") || name.startsWith("access$")) continue;
+            if (!cFirst) cs.append(",");
+            cFirst = false;
+            cs.append("{\\"name\\":\\"").append(name).append("\\"}");
+        }
+        return cs.append("]").toString();
+    }
+    public String toJson(Object obj) {
+        if (obj == null) return "null";
+        if (obj instanceof String) return escape((String)obj);
+        if (obj instanceof Number || obj instanceof Boolean) return obj.toString();
+        if (obj instanceof int[]) {
+            int[] arr = (int[])obj;
+            StringBuilder asb = new StringBuilder("[");
+            for(int i=0; i<arr.length; i++) { asb.append(arr[i]); if(i<arr.length-1) asb.append(","); }
+            return asb.append("]").toString();
+        }
+        if (obj.getClass().isArray()) {
+            Object[] arr = (Object[])obj;
+            StringBuilder asb = new StringBuilder("[");
+            for(int i=0; i<arr.length; i++) { asb.append(toJson(arr[i])); if(i<arr.length-1) asb.append(","); }
+            return asb.append("]").toString();
+        }
+        ${code.includes('TreeNode') ? `
+        if (obj instanceof TreeNode) {
+            TreeNode n = (TreeNode)obj;
+            return "{\\"val\\":" + n.val + ",\\"left\\":" + toJson(n.left) + ",\\"right\\":" + toJson(n.right) + "}";
+        }
+        ` : ''}
+        ${code.includes('ListNode') ? `
+        if (obj instanceof ListNode) {
+            ListNode n = (ListNode)obj;
+            return "{\\"val\\":" + n.val + ",\\"next\\":" + toJson(n.next) + "}";
+        }
+        ` : ''}
+        return escape(obj.toString());
+    }
+}
+`;
+      driver = `\n\n// AUTO-GENERATED DRIVER\n${extraClasses}\n${traceCollectorCode}\npublic class Main {\n    public static void main(String[] args) {\n        Solution sol = new Solution();\n        Object result = sol.${methodName}(${args});\n        System.out.println(result);\n    }\n}\n`;
     }
   } else if (lang.includes('cpp') || lang.includes('c++') || lang.includes('c_cpp')) {
     const match = code.match(/class\s+Solution\s*\{[\s\S]*?public:\s*(?:[\w<>,\s\[\]\*\&]+)\s+([a-zA-Z_]\w*)\s*\(/);
@@ -57,8 +167,10 @@ function generateDriver(language, code, testInput) {
   return driver ? code + driver : code;
 }
 
+const { executeInstrumentedCode } = require('./sandbox');
+
 /**
- * Simulates code execution via Groq LLM and returns a structured JSON trace
+ * Uses Groq LLM to instrument the code with a TraceCollector, then executes it securely to capture the trace.
  */
 async function getTrace(editorMode, language, code, testInput, apiKey, judge0ApiKey) {
   if (!code || code.trim() === '') {
@@ -69,217 +181,180 @@ async function getTrace(editorMode, language, code, testInput, apiKey, judge0Api
   if (!effectiveKey) {
     return { success: false, error: 'No API key available. Set GROQ_API_KEY in .env or provide a custom key.', frames: [] };
   }
-  
+
   const groq = new Groq({ apiKey: effectiveKey });
-  
   const runnableCode = generateDriver(language, code, testInput);
 
-  const systemPrompt = `You are a strict code interpreter and visualizer.
-Your task is to mentally execute the user's ${language} code step-by-step on the provided test input and output a detailed JSON trace of the execution.
-Do NOT output any markdown, explanations, or code blocks outside of the JSON. ONLY valid JSON.
+  const systemPrompt = `You are an expert AI code instrumenter. Your job is to rewrite the provided ${language} code so that it outputs a JSON trace of its execution to standard output.
+
+PRIORITY LANGUAGE: Java is the primary priority, but you must output valid code in the requested language: ${language}.
 
 CRITICAL INSTRUCTIONS:
-1. KEY-STEP DEBUGGING: Do NOT output a frame for every single line of code. A human user does not want to click through 50 repetitive steps. Group mundane operations (like a simple condition check + assignment) into a single logical "Key-Step" frame.
-2. SKIP INITIALIZATION: Do NOT output frames for trivial variable declarations or empty data structure initializations (e.g., \`left = 0\`, \`maxLen = 0\`, \`set = new HashSet()\`). Skip straight to the first meaningful step where logic actually begins (e.g., the first iteration of the main loop).
-3. MAXIMUM FRAME LIMIT: You MUST output a MAXIMUM of 25 frames for the entire execution. If an algorithm loops many times, aggressively SKIP the repetitive middle iterations. Only show the most important algorithmic milestones (e.g., window expanding, duplicate found, target matched, base case reached).
-4. Every frame MUST have 'dataStructureState' with a non-generic type if a primary structure exists. Forbidden to use "type": "generic" unless the code literally has no recognizable data structure.
-5. 'codeWithValues' is mandatory every frame. If you grouped multiple lines, put the most important line here (e.g., 'if nums[1] < 9' or 'maxLen = 3').
-5. 'explanation' must be extremely concise (under 10 words) to save tokens (e.g., "nums[1] < target, continuing").
-6. 'variables' must include EVERY variable in scope, not just the ones that changed. Always include the main input array/structure in full so the frontend can render it.
-7. The 'event' field MUST be exactly one of: function_call | loop_iteration | comparison | assignment | return | branch_true | branch_false | swap | recurse | base_case.
-9. TOKEN LIMIT OPTIMIZATION (CRITICAL):
-   - OMIT 'dataStructureState' completely from the frame if it has NOT changed since the previous frame.
-   - OMIT 'recursionTree' completely from the frame if the call stack has NOT changed.
-   - OMIT the full tree/graph object from the 'variables' dictionary. Only include primitives (int, bool, string) and small arrays.
-   - OMIT any variable from 'variables' if its value has NOT changed since the previous frame. Only include variables that changed or are new. The backend will automatically carry them over.
+1. DO NOT HALLUCINATE A TRACE YOURSELF. You must output the fully runnable, instrumented ${language} code.
+2. The instrumented code MUST capture the state and print it as a JSON string to STDOUT using a TraceCollector mechanism at the very end of the execution.
+3. STRICT SMART SAMPLING (MAX 50 FRAMES):
+   - For recursive algorithms (like DFS/Trees), EVERY function call entry, important branch, and return is significant and MUST be traced!
+   - For iterative algorithms, emit a trace frame when a HIGHLY significant event occurs (swap, new max, pointer finalized). Aggressively skip trivial \`i++\` iterations.
+   - Limit the total frames collected to 50 max (e.g. \`if (frameCount > 50) return;\`).
+4. DATA STRUCTURE TYPE OVERRIDES: Set 'dataStructureState.type' to one of the rich visualizers if applicable:
+   - 'sorting_bar_chart' (for array sorts)
+   - 'divide_and_conquer' (for merge/quick sort)
+   - 'chessboard' (for backtracking grids)
+   - 'dp_table' (for DP 2D arrays)
+   - 'string_matcher' (for KMP/pointers on strings)
+   - 'interval' (for merging intervals)
+   - 'trie' (for n-ary string trees)
+   Otherwise use generic ones ('array', 'hashmap', 'tree', 'graph', 'linked_list', etc).
+5. The final printed output of your script MUST be a valid JSON object matching this exact schema:
+   {
+     "frames": [
+       {
+         "line": <number>,
+         "event": "assignment|comparison|swap|function_call|return|base_case",
+         "codeWithValues": "e.g., if (nums[1] < 9)",
+         "explanation": "Human readable (<10 words)",
+         "variables": { "varName": <value> }, // Include ALL relevant variables
+         "dataStructureState": {
+           "type": "<type_from_step_4>",
+           "name": "<name_of_main_var>",
+           "pointers": { "left": 0, "i": 1 }
+         }
+       }
+     ],
+     "result": <final_return_value_or_string>
+   }
+6. WRAP YOUR ENTIRE OUTPUT IN \`\`\`${language} ... \`\`\`
+7. Ensure the code is completely self-contained and runs without syntax errors. For Java, it MUST be a valid \`Main\` class with a \`public static void main(String[] args)\` method. 
+8. JSON GENERATION & FULL DATA STRUCTURES:
+   - For Java, a \`TraceCollector\` class is already injected into the driver. Initialize it (\`static TraceCollector tc = new TraceCollector();\`).
+   - You MUST use \`tc.toJson(varName)\` to serialize any objects or arrays (like TreeNode, int[]). Example: \`"{\\"root\\":" + tc.toJson(root) + "}"\`.
+   - CRITICAL FOR TREES/LISTS: You MUST assign the constructed root to \`TraceCollector.globalTree\` inside \`main()\` BEFORE calling the solution method (e.g. \`TraceCollector.globalTree = root;\`).
 
-10. CHAIN OF THOUGHT (CRITICAL BUT CONCISE):
-    Write a VERY BRIEF '<scratchpad>' block to trace the state. Do NOT write long sentences in the scratchpad. Keep it to a few words per step to save output tokens.
-    Format:
-    <scratchpad>
-    S1: maxDepth(3)
-    S2: left=maxDepth(9)
-    ...
-    </scratchpad>
-    \`\`\`json
-    { ... }
-    \`\`\`
-
-11. RETURN VALUE RULE:
-    The 'returnValue' field in your JSON MUST ONLY contain the exact primitive value (e.g., "0", "1", "[1, 2]", "true"). DO NOT write sentences like "Returning 0 because...".
-
-12. LEETCODE ARRAY REPRESENTATION:
-    If the test input is an array representing a Binary Tree (e.g., [3, 9, 20, null, null, 15, 7]), it is in level-order (BFS). 
-    - The root is at index 0.
-    - The left child of node at index i is at 2*i + 1.
-    - The right child of node at index i is at 2*i + 2.
-    - 'null' means the child doesn't exist. You MUST correctly mentally build this tree before tracing! Do NOT hallucinate nulls. Node 7 in [3,9,20,null,null,15,7] is a VALID node, not null!
-
-13. DATA STRUCTURE TAXONOMY & ENFORCED TYPES (CRITICAL):
-    You MUST output EXACTLY ONE of these types as the primary 'dataStructureState.type'. Include auxiliary data in 'variables'.
-    - array: 1D arrays, strings. Include pointers as integer variables.
-    - matrix: 2D grids, boards.
-    - sliding_window: Include 'window: [left, right]' in pointers if applicable.
-    - two_pointers: Standard array/string but explicitly flagged.
-    - hashmap: Include key-value state.
-    - set: Output contents as a flat array (e.g. ["a", "b", "c"]).
-    - stack: Output as array. Note if monotonic.
-    - queue: Output as array. Note if monotonic.
-    - priority_queue: ALWAYS output as a flat 0-indexed array (heap representation), NEVER as pointer/node objects.
-    - linked_list: Output nodes[] with id, val, next, highlight, label.
-    - binary_tree: Output nodes[] array.
-    - graph: Adjacency list. Include 'directed' and 'weighted' boolean flags in variables if applicable.
-    - trie: ALWAYS output as a nested dictionary, NEVER as node arrays.
-    - union_find: Output 'parent' and 'rank' arrays.
-    - interval: Output as 2D array of [start, end].
-    - segment_tree: ALWAYS output as a flat 0-indexed array. NEVER output as pointer/node objects.
-    - fenwick_tree: Output as flat array (1-indexed but JS arrays are 0-indexed).
-    - bitwise: Output variables as raw integers, the frontend will render the bits.
-    - recursion: Backtracking where state is implicit in call stack.
-    - generic: Fallback.
-
-14. DP METADATA:
-    If a cell in an array/matrix is derived from previous cells (DP), include a 'dp_derivation: [source_index_1, source_index_2]' in the frame if possible.
-
-15. JSON STRING ESCAPING (CRITICAL):
-    Whenever you include code snippets, characters, or string values in 'codeWithValues' or 'explanation', you MUST either use single quotes (e.g. 'a') OR properly escape double quotes (e.g. \\"a\\"). NEVER use unescaped double quotes inside a JSON string value.
-
-JSON SCHEMA TO FOLLOW EXACTLY:
-{
-  "metadata": {
-    "algorithm": "Name of algorithm used (e.g., Two Pointer, DFS)",
-    "dataStructure": "Main DS used",
-    "timeComplexity": "O(?)",
-    "spaceComplexity": "O(?)"
-  },
-  "frames": [
-    {
-      "line": <line number currently executing>,
-      "event": "<function_call | loop_iteration | comparison | assignment | return | branch_true | branch_false | swap | recurse | base_case>",
-      "codeWithValues": "string showing the code line with variables replaced by values",
-      "explanation": "Human-readable specific explanation of what this line is doing right now",
-      "variables": {
-        "varName": { "type": "int|str|bool|list|dict|TreeNode|ListNode", "value": <actual value or object> }
-      },
-      "dataStructureState": {
-        "type": "array|binary_tree|graph|linked_list|stack|queue|hashmap|sliding_window|bitwise|generic",
-        "name": "nums", // Name of the primary variable being visualized
-        
-        // IF ARRAY or SLIDING_WINDOW:
-        "pointers": {"i": 0, "left": 0, "right": 3}, // named indices
-        "window": [0, 3], // start and end index (inclusive) if sliding window
-        "highlights": [0, 3], // indices that changed or are being compared
-        
-        // IF LINKED_LIST or TREE or GRAPH:
-        "nodes": [
-          {"id": 0, "val": 3, "left": 1, "right": 2, "next": 1, "highlight": "active|visited|none", "label": "curr"}
-        ]
-      },
-      // IF RECURSIVE (MUST include for recursive functions):
-      "recursionTree": {
-        "nodes": [
-          {"id": 0, "label": "funcName(args)", "status": "active|waiting|done", "returnValue": "...", "parentId": null}
-        ]
-      }
+EXAMPLE INSTRUMENTATION FOR TREES:
+\`\`\`java
+public class Main {
+    static TraceCollector tc = new TraceCollector();
+    public static void main(String[] args) {
+        TreeNode root = new TreeNode(3, new TreeNode(9), null);
+        TraceCollector.globalTree = root; // CRITICAL!
+        Solution sol = new Solution();
+        tc.print(String.valueOf(sol.maxDepth(root)));
     }
-  ],
-  "result": <final returned value of the function>
 }
-
-Test Input: ${JSON.stringify(testInput)}
-
-User Code:
-${runnableCode}`;
+class Solution {
+    public int maxDepth(TreeNode root) {
+        tc.addFrame(12, "function_call", "maxDepth(" + (root==null?"null":root.val) + ")", "Entering maxDepth", "{\\"root\\":"+tc.toJson(root)+"}", "{\\"type\\":\\"tree\\"}");
+        if (root == null) {
+            tc.addFrame(13, "base_case", "if (root == null)", "Hit base case", "{\\"root\\":null}", "{\\"type\\":\\"tree\\"}");
+            return 0;
+        }
+        int left = maxDepth(root.left);
+        tc.addFrame(16, "assignment", "left = " + left, "Computed left depth", "{\\"root\\":"+tc.toJson(root)+",\\"left\\":"+left+"}", "{\\"type\\":\\"tree\\"}");
+        return 1 + left;
+    }
+}
+\`\`\`
+`;
 
   try {
-    const systemMessage = systemPrompt.split("Test Input:")[0];
-    const userMessage = "Test Input:" + systemPrompt.split("Test Input:")[1] + "\n\nCRITICAL: DO NOT SKIP ANY STEPS. DO NOT STOP AT 11 FRAMES. Trace the algorithm all the way back to the root's final return statement.";
+    const userMessage = `Test Input: ${JSON.stringify(testInput)}\n\nUser Code:\n${runnableCode}\n\nPlease instrument this code to print the JSON trace to stdout. ONLY RETURN CODE.`;
 
+    console.log("[TraceEngine] Prompting LLM for instrumentation...");
     const completion = await groq.chat.completions.create({
       messages: [
-        { role: "system", content: systemMessage },
+        { role: "system", content: systemPrompt },
         { role: "user", content: userMessage }
       ],
       model: "llama-3.3-70b-versatile",
       temperature: 0.1,
-      max_tokens: 8192
+      max_tokens: 4000
     });
 
-    let responseContent = completion.choices[0]?.message?.content || "{}";
-    
-    // DEBUG: Save raw LLM response to disk
-    require('fs').writeFileSync('llm_debug_trace.txt', responseContent, 'utf8');
+    console.log(`[TraceEngine] Token Usage: ${JSON.stringify(completion.usage)}`);
 
-    // Robustly extract JSON, ignoring scratchpad even if it has braces
-    let jsonStr = responseContent;
-    const jsonBlockMatch = responseContent.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-    if (jsonBlockMatch) {
-      jsonStr = jsonBlockMatch[1];
-    } else {
-      const fallbackMatch = responseContent.match(/\{[\s\S]*"frames"\s*:[\s\S]*\}/);
-      if (fallbackMatch) {
-        jsonStr = fallbackMatch[0];
-      } else {
-        // Find the first `{` and last `}` as a last resort
-        const firstBrace = responseContent.indexOf('{');
-        const lastBrace = responseContent.lastIndexOf('}');
-        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-          jsonStr = responseContent.substring(firstBrace, lastBrace + 1);
-        }
+    let responseContent = completion.choices[0]?.message?.content || "";
+    
+    // Extract code block
+    let instrumentedCode = responseContent;
+    const codeMatch = responseContent.match(/```(?:java|python|javascript|cpp|c\+\+|js|py)?\s*([\s\S]*?)\s*```/);
+    if (codeMatch) {
+      instrumentedCode = codeMatch[1];
+    } else if (language.includes('java') && responseContent.includes("public class Main")) {
+      // Fallback extraction for Java if markdown tags missing
+      const firstClass = responseContent.indexOf("public class Main");
+      const lastBrace = responseContent.lastIndexOf("}");
+      if (firstClass !== -1 && lastBrace !== -1) {
+        instrumentedCode = responseContent.substring(firstClass, lastBrace + 1);
       }
     }
+
+    console.log("[TraceEngine] Generated instrumented code. Executing in sandbox...");
     
-    // Clean up any trailing garbage after the JSON object
+    // Execute the instrumented code securely
+    const execResult = await executeInstrumentedCode(language, instrumentedCode, 2000, judge0ApiKey);
+    
+    if (!execResult.success) {
+       console.error("[TraceEngine] Sandbox Execution Failed:", execResult.error);
+       return { success: false, error: execResult.isTLE ? 'Time Limit Exceeded (Execution took too long or got stuck in infinite loop).' : `Execution Error: ${execResult.error}`, frames: [], isTLE: execResult.isTLE };
+    }
+
+    let jsonStr = execResult.output;
+    
+    // Try to extract the JSON block if the program printed other debug stuff
+    const jsonBlockMatch = execResult.output.match(/\{[\s\S]*"frames"\s*:[\s\S]*\}/);
+    if (jsonBlockMatch) {
+      jsonStr = jsonBlockMatch[0];
+    } else {
+        const firstBrace = execResult.output.indexOf('{');
+        const lastBrace = execResult.output.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          jsonStr = execResult.output.substring(firstBrace, lastBrace + 1);
+        }
+    }
+
     jsonStr = jsonStr.trim();
-    
     let result;
     try {
       result = JSON.parse(jsonStr);
     } catch (parseError) {
-      // Try to repair truncated JSON (LLM token limit reached)
-      try {
-        const lastCompleteFrame = jsonStr.lastIndexOf('},');
-        if (lastCompleteFrame > 0) {
-          const repairedStr = jsonStr.substring(0, lastCompleteFrame + 1) + ']}';
-          result = JSON.parse(repairedStr);
-          result.error = "The trace was too long and was truncated. Some later steps are missing.";
-          console.log("Successfully repaired truncated JSON.");
-        } else {
-          throw parseError;
-        }
-      } catch(e) {
-        console.error("Failed to parse JSON trace:", parseError, "Raw string was:", jsonStr.substring(0, 100) + "...");
-        result = { frames: [], error: "LLM output could not be parsed as valid JSON. It may have exceeded token limits." };
-      }
+      console.error("Failed to parse stdout JSON trace:", parseError, "Raw string was:", jsonStr.substring(0, 100) + "...");
+      return { frames: [], error: "Instrumented code did not output valid JSON. It may have crashed or printed arbitrary text.", rawOutput: execResult.output };
     }
-    
-    // Add IDs to frames
+
+    // Add IDs and cleanup frames
     if (result.frames && Array.isArray(result.frames)) {
       result.frames.forEach((f, i) => {
-        f.id = i;
-        if (!f.variables) f.variables = {};
+        if (f.c !== undefined) { f.codeWithValues = f.c; delete f.c; }
+        if (f.e !== undefined) { f.explanation = f.e; delete f.e; }
+        if (f.v !== undefined) { f.variables = f.v; delete f.v; }
+        if (f.d !== undefined) { f.dataStructureState = f.d; delete f.d; }
         
-        // Carry over data structures if omitted (token optimization)
-        if (i > 0) {
-          if (!f.dataStructureState && result.frames[i-1].dataStructureState) {
-            f.dataStructureState = JSON.parse(JSON.stringify(result.frames[i-1].dataStructureState));
-          }
-          if (!f.recursionTree && result.frames[i-1].recursionTree) {
-            f.recursionTree = JSON.parse(JSON.stringify(result.frames[i-1].recursionTree));
-          }
-          
-          // Carry over missing variables
-          const prevVars = result.frames[i-1].variables || {};
-          for (const k of Object.keys(prevVars)) {
-            if (!(k in f.variables)) {
-              f.variables[k] = JSON.parse(JSON.stringify(prevVars[k]));
-            }
-          }
+        if (f.dataStructureState) {
+          let d = f.dataStructureState;
+          if (d.t !== undefined) { d.type = d.t; delete d.t; }
+          if (d.n !== undefined) { d.name = d.n; delete d.n; }
+          if (d.p !== undefined) { d.pointers = d.p; delete d.p; }
         }
 
-        // Ensure prevValue exists for inspector
+        f.id = i;
+        if (!f.variables) f.variables = {};
+
+        // Auto-infer primitive variables formatting for the frontend
+        for (const [k, v] of Object.entries(f.variables)) {
+          if (v !== null && typeof v === 'object' && 'value' in v) {
+            continue; 
+          }
+          let type = 'generic';
+          if (typeof v === 'number') type = 'int';
+          else if (typeof v === 'boolean') type = 'bool';
+          else if (typeof v === 'string') type = 'str';
+          else if (Array.isArray(v)) type = 'list';
+          else if (v && typeof v === 'object') type = 'dict';
+          f.variables[k] = { type, value: v };
+        }
+
         if (i > 0) {
-          const prevVars = result.frames[i-1].variables || {};
+          const prevVars = result.frames[i - 1].variables || {};
           for (const [k, v] of Object.entries(f.variables)) {
             v.prevValue = prevVars[k] ? prevVars[k].value : undefined;
             v.changedThisFrame = JSON.stringify(v.value) !== JSON.stringify(v.prevValue);
@@ -302,7 +377,7 @@ ${runnableCode}`;
     console.error("Tracing error:", error);
     return {
       success: false,
-      error: error.message || "Failed to generate trace via AI simulation",
+      error: error.message || "Failed to instrument and execute trace",
       frames: []
     };
   }

@@ -15,7 +15,11 @@ import {
   TreeVisualizer,
   StackVisualizer,
   QueueVisualizer,
-  GraphVisualizer
+  GraphVisualizer,
+  SortingBarChart,
+  DPTableView,
+  ChessboardGrid,
+  StringMatcher
 } from './Visualizers';
 import { IntervalVisualizer } from './IntervalVisualizer';
 import { UnionFindVisualizer } from './UnionFindVisualizer';
@@ -675,8 +679,48 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
           </Section>
         )}
 
+        {/* ── SORTING BAR CHART ── */}
+        {detected.type === 'sorting_bar_chart' && detected.mainArray && (
+          <Section label="Sorting">
+            <SortingBarChart
+              arrayData={detected.mainArray}
+              pointers={detected.pointers}
+              prevVars={prevVars}
+            />
+          </Section>
+        )}
+
+        {/* ── DP TABLE ── */}
+        {detected.type === 'dp_table' && (detected.mainArray || (detected.arrays && detected.arrays[0])) && (
+          <Section label="Dynamic Programming">
+            <DPTableView
+              matrixData={detected.mainArray || detected.arrays[0]}
+              prevVars={prevVars}
+            />
+          </Section>
+        )}
+
+        {/* ── CHESSBOARD / GRID ── */}
+        {detected.type === 'chessboard' && (detected.mainArray || (detected.arrays && detected.arrays[0])) && (
+          <Section label="Board">
+            <ChessboardGrid
+              boardData={detected.mainArray || detected.arrays[0]}
+            />
+          </Section>
+        )}
+
+        {/* ── STRING MATCHER ── */}
+        {detected.type === 'string_matcher' && detected.mainArray && (
+          <Section label="String Matcher">
+            <StringMatcher
+              stringData={detected.mainArray}
+              pointers={detected.pointers}
+            />
+          </Section>
+        )}
+
         {/* ── ARRAY / STRING / SET + POINTERS ── */}
-        {(['array', 'sliding_window', 'array_hashmap', 'recursion', 'set', 'hashmap'].includes(detected.type) && detected.type !== 'interval' && detected.type !== 'union_find') &&
+        {(['array', 'sliding_window', 'array_hashmap', 'recursion', 'set', 'hashmap'].includes(detected.type) && !['interval', 'union_find', 'sorting_bar_chart', 'dp_table', 'chessboard', 'string_matcher'].includes(detected.type)) &&
           detected.arrays && detected.arrays.length > 0 && (
             <Section label="Arrays">
               {detected.arrays.map((arr, idx) => (

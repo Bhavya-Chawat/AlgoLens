@@ -1539,6 +1539,166 @@ function GraphVisualizer({ graphData, prevVars }) {
 }
 
 // ============================================================
+// NEW VISUALIZERS (Sorting, DP, Trie, etc.)
+// ============================================================
+
+function SortingBarChart({ arrayData, pointers, prevVars }) {
+  const { name, info } = arrayData;
+  const values = info.value || [];
+  const maxVal = Math.max(...values.filter(v => typeof v === 'number'), 1);
+  const chartHeight = 150;
+  
+  const prevArr = prevVars?.[name]?.value;
+  const changedIdx = new Set();
+  if (Array.isArray(prevArr)) {
+    values.forEach((v, i) => { if (prevArr[i] !== v) changedIdx.add(i); });
+  }
+
+  // Pointer indices
+  const pointedIndices = new Set(Object.values(pointers).filter(v => typeof v === 'number'));
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--canvas-text-muted)' }}>
+        <span style={{ color: '#D49B84', fontWeight: 600 }}>{name}</span> [Bar Chart]
+      </div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', height: chartHeight, gap: 4, borderBottom: '2px solid var(--border)', paddingBottom: 4 }}>
+        {values.map((val, i) => {
+          const isPointed = pointedIndices.has(i);
+          const isChanged = changedIdx.has(i);
+          const heightPct = typeof val === 'number' ? Math.max((val / maxVal) * 100, 5) : 5;
+          const bg = isChanged ? 'var(--accent-amber)' : isPointed ? 'var(--accent-sage)' : 'var(--bg-card)';
+          const border = isChanged || isPointed ? 'none' : '1px solid var(--border)';
+          
+          return (
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--canvas-text-muted)' }}>{val}</span>
+              <div style={{
+                width: Math.max(16, Math.min(32, 300 / Math.max(values.length, 1))),
+                height: `${heightPct}%`,
+                background: bg, border: border, borderRadius: '4px 4px 0 0',
+                transition: 'all 250ms ease'
+              }} />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function DPTableView({ matrixData, prevVars }) {
+  const { name, info } = matrixData;
+  const values = info.value || [];
+  if (!Array.isArray(values) || !Array.isArray(values[0])) return null;
+  const rows = values.length;
+  const cols = values[0].length;
+  const prevGrid = prevVars?.[name]?.value;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--canvas-text-muted)' }}>
+        <span style={{ color: '#E7C36A', fontWeight: 600 }}>{name}</span> [DP Table {rows}x{cols}]
+      </div>
+      <table style={{ borderCollapse: 'collapse' }}>
+        <tbody>
+          {values.map((row, r) => (
+            <tr key={r}>
+              {row.map((cell, c) => {
+                const changed = prevGrid && prevGrid[r] && prevGrid[r][c] !== cell;
+                return (
+                  <td key={c} style={{
+                    width: 32, height: 32, border: '1px solid var(--border)',
+                    textAlign: 'center', fontSize: 11, fontFamily: 'var(--font-mono)',
+                    background: changed ? 'rgba(231,195,106,0.2)' : 'var(--bg-canvas)',
+                    color: changed ? 'var(--accent-amber)' : 'var(--canvas-text-primary)'
+                  }}>
+                    {cell}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ChessboardGrid({ boardData }) {
+  const { name, info } = boardData;
+  const values = info.value || [];
+  if (!Array.isArray(values)) return null;
+  const n = values.length;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--canvas-text-muted)' }}>
+        <span style={{ color: '#A78BFA', fontWeight: 600 }}>{name}</span> [Board {n}x{n}]
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${n}, 36px)`, border: '2px solid var(--border)', width: 'fit-content' }}>
+        {values.map((row, r) => 
+          Array.isArray(row) ? row.map((cell, c) => {
+            const isDark = (r + c) % 2 === 1;
+            return (
+              <div key={c} style={{
+                width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: isDark ? 'rgba(156,163,175,0.15)' : 'var(--bg-canvas)',
+                fontSize: 16, fontWeight: 'bold', color: cell === 'Q' || cell === 1 ? 'var(--accent-amber)' : 'transparent'
+              }}>
+                {cell === 'Q' || cell === 1 ? '♛' : ''}
+              </div>
+            );
+          }) : null
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StringMatcher({ stringData, pointers }) {
+  const { name, info } = stringData;
+  const s = info.value || "";
+  
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+       <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--canvas-text-muted)' }}>
+        <span style={{ color: '#7EB8D4', fontWeight: 600 }}>{name}</span> [String]
+      </div>
+      <div style={{ display: 'flex', gap: 2 }}>
+        {s.split('').map((char, i) => {
+           const activePtrs = Object.entries(pointers).filter(([p, idx]) => idx === i).map(([p]) => p);
+           return (
+             <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+               <div style={{
+                 width: 28, height: 28, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                 background: activePtrs.length ? 'rgba(231,195,106,0.2)' : 'var(--bg-card)',
+                 color: activePtrs.length ? 'var(--accent-amber)' : 'var(--canvas-text-primary)',
+                 fontFamily: 'var(--font-mono)', fontWeight: 'bold', borderRadius: 4
+               }}>
+                 {char}
+               </div>
+               <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--accent-sage)', height: 12, marginTop: 2 }}>
+                 {activePtrs.join(',')}
+               </div>
+             </div>
+           );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const DivideAndConquerView = ArrayVisualizer;
+const TrieVisualizer = TreeVisualizer;
+const IntervalVisualizer = ArrayVisualizer; 
+
+// ============================================================
 // EXPORTS
 // ============================================================
-export { ArrayVisualizer, HashMapVisualizer, GenericBoard, RecursionTreeViz, LinkedListVisualizer, TreeVisualizer, StackVisualizer, QueueVisualizer, GraphVisualizer };
+export { 
+  ArrayVisualizer, HashMapVisualizer, GenericBoard, RecursionTreeViz, 
+  LinkedListVisualizer, TreeVisualizer, StackVisualizer, QueueVisualizer, 
+  GraphVisualizer, SortingBarChart, DPTableView, ChessboardGrid, 
+  StringMatcher, DivideAndConquerView, TrieVisualizer, IntervalVisualizer 
+};
