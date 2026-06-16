@@ -150,6 +150,34 @@ export function useTraceEngine() {
     }
   }, [engineStatus]);
 
+  // ── expandTrace ───────────────────────────────────────────
+  const expandTrace = useCallback(async (editorMode, language, code, testInput, apiKey, judge0ApiKey, startFrame, endFrame) => {
+    setEngineStatus('executing');
+    setError(null);
+    try {
+      const res = await fetch('http://localhost:3000/api/execute/expand', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          editorMode, language, code, 
+          testInput: JSON.parse(testInput || '[]'), 
+          apiKey, judge0ApiKey,
+          startFrame, endFrame 
+        })
+      });
+      const result = await res.json();
+      if (result.error) {
+        throw new Error(result.error);
+      }
+      return result;
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setEngineStatus('ready');
+    }
+  }, [engineStatus]);
+
   // ── resetEngine ───────────────────────────────────────────
   // Terminates the crashed worker and resets state.
   const resetEngine = useCallback(() => {
@@ -166,6 +194,7 @@ export function useTraceEngine() {
   return {
     initEngine,
     executeCode,
+    expandTrace,
     resetEngine,
     isReady:     engineStatus === 'ready',
     isLoading:   engineStatus === 'loading',

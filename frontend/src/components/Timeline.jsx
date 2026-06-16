@@ -27,7 +27,7 @@ const SPEEDS = [0.25, 0.5, 1, 2, 4];
 const Timeline = React.memo(function Timeline({
   trace, frameIndex, playing, speed, bugs, onUpdateReq, hideControls
 }) {
-  const { state, update } = useApp();
+  const { state, update, traceEngine } = useApp();
   
   const executionTrace = trace || state.executionTrace;
   const currentFrame = frameIndex !== undefined ? frameIndex : state.currentFrame;
@@ -199,6 +199,60 @@ const Timeline = React.memo(function Timeline({
   const currentFrameObj = executionTrace[currentFrame];
   const pct = total > 1 ? (currentFrame / (total - 1)) * 100 : 0;
   const trackWidth = `${zoom * 100}%`;
+
+  const handleGoDeeper = async () => {
+    if (currentFrame >= total - 1) {
+      alert("Cannot expand at the very end of the trace.");
+      return;
+    }
+    try {
+      doUpdate({ isPlaying: false });
+      update({ globalLoading: true, globalLoadingText: 'Expanding trace depth...' });
+      const startFrame = executionTrace[currentFrame];
+      const endFrame = executionTrace[currentFrame + 1];
+
+      const code = state.code || '';
+      let testInput = state.testInput || '';
+      const obj = {};
+      let hasKeys = false;
+      (state.customInputs || []).forEach(i => {
+        if (!i.key) return;
+        hasKeys = true;
+        try { obj[i.key] = JSON.parse(i.val); }
+        catch { obj[i.key] = i.val; } 
+      });
+      if (hasKeys) testInput = JSON.stringify([obj]);
+      else if (state.editorMode === 'custom') testInput = '[]';
+
+      const result = await traceEngine.expandTrace(
+        state.editorMode, state.language, code, testInput, 
+        state.customApiKey, state.judge0ApiKey, 
+        startFrame, endFrame
+      );
+      
+      const rawFrames = result.frames || [];
+      const expandedFrames = rawFrames.filter(f => {
+        const isSameAsStart = f.line === startFrame.line && f.codeWithValues === startFrame.codeWithValues;
+        const isSameAsEnd = f.line === endFrame.line && f.codeWithValues === endFrame.codeWithValues;
+        return !isSameAsStart && !isSameAsEnd;
+      });
+
+      if (expandedFrames.length > 0) {
+        const newTrace = [
+          ...executionTrace.slice(0, currentFrame + 1),
+          ...expandedFrames,
+          ...executionTrace.slice(currentFrame + 1)
+        ];
+        update({ executionTrace: newTrace, globalLoading: false });
+      } else {
+        update({ globalLoading: false });
+        alert("Cannot expand further! There are no additional hidden steps between these two frames.");
+      }
+    } catch (err) {
+      update({ globalLoading: false });
+      alert("Failed to expand trace: " + err.message);
+    }
+  };
 
   return (
     <div style={{
@@ -446,7 +500,7 @@ const Timeline = React.memo(function Timeline({
         width: rightWidth, padding: '12px 16px',
         borderLeft: '1px solid var(--border)', flexShrink: 0,
         display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-        position: 'relative', overflow: 'hidden',
+        position: 'relative', overflowY: 'auto', overflowX: 'hidden',
       }}>
         {/* Resize handle on left edge */}
         <div
@@ -508,6 +562,24 @@ const Timeline = React.memo(function Timeline({
             <QuickJumpBtn icon={<AlertTriangle size={10} />} label="First Bug" onClick={jumpToFirstBug} disabled={!detectedBugs.length} />
             <QuickJumpBtn icon={<CornerDownLeft size={10} />} label="Last Return" onClick={jumpToLastReturn} />
           </div>
+          <button
+            onClick={handleGoDeeper}
+            disabled={currentFrame >= total - 1}
+            style={{
+              padding: '6px', borderRadius: 4,
+              background: 'rgba(143,175,157,0.1)', border: '1px solid rgba(143,175,157,0.3)',
+              color: 'var(--accent-sage)', fontSize: 10, fontWeight: 600,
+              cursor: currentFrame >= total - 1 ? 'not-allowed' : 'pointer',
+              textTransform: 'uppercase', display: 'flex', justifyContent: 'center', gap: 4,
+              alignItems: 'center', transition: 'all 150ms ease',
+              opacity: currentFrame >= total - 1 ? 0.5 : 1
+            }}
+            onMouseEnter={e => { if(currentFrame < total - 1) e.currentTarget.style.background = 'rgba(143,175,157,0.2)' }}
+            onMouseLeave={e => { if(currentFrame < total - 1) e.currentTarget.style.background = 'rgba(143,175,157,0.1)' }}
+          >
+            <ZoomIn size={12} />
+            Expand Next Step
+          </button>
         </div>
       </div>
 
