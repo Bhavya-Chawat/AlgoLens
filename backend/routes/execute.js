@@ -32,6 +32,8 @@ router.post('/', async (req, res) => {
       frames: result.frames,
       bugs: [], 
       result: executionOutput || result.result,
+      algorithmName: result.algorithmName,
+      isSummarized: result.isSummarized,
       tokenUsage: result.tokenUsage
     });
 

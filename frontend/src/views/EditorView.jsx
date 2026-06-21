@@ -705,6 +705,8 @@ export default function EditorView() {
         detectedBugs:   result.bugs || [],
         lastExecutedCode: code,
         executionResult: result.result,
+        algorithmName: result.algorithmName || null,
+        isSummarized: result.isSummarized || false,
       });
     } catch (err) {
       setRunError(err.message || 'Execution failed.');

@@ -1,4 +1,6 @@
 const Groq = require('groq-sdk');
+const { analyzeCode } = require('./analyzerService');
+const { buildPrompt } = require('./promptModules');
 
 function generateDriver(language, code, testInput) {
   let driver = '';
@@ -119,101 +121,12 @@ async function getTrace(editorMode, language, code, testInput, apiKey, judge0Api
 
   const runnableCode = generateDriver(language, code, testInput);
 
-  const systemPrompt = `You are a strict code visualizer. Mentally execute the ${language} code and output a JSON trace. NO markdown outside JSON.
-
-CRITICAL INSTRUCTIONS:
-1. VISUAL SUMMARY & PACING (CRITICAL): The user wants to see this algorithm visualized! Mentally execute the FULL algorithm from start to finish. If the execution is short (under 25 steps), TRACE EVERY SINGLE STEP! If the execution is long, YOU decide which key frames to skip (like trivial loops) to fit the limit. CRITICAL: Do NOT stop the trace prematurely at an intermediate return! You MUST traverse the whole algorithm up until the TRUE final return of the main execution!
-2. EXPAND FEATURE AVAILABLE: If the execution is long, provide a highly summarized overview capturing the start, major state changes/turning points, and the final result. The frontend has an 'expand' feature the user can click to drill into missing details, so your primary job is to create a complete but short end-to-end summary!
-3. STRICT FRAME LIMIT: The trace MUST NOT exceed 30 frames. Because you are intelligently summarizing the algorithm, you MUST comfortably reach the final return statement.
-4. 'dataStructureState': MUST use a non-generic type if a primary structure exists. Forbidden to use "type": "generic" if there is a structure.
-5. 'codeWithValues': Mandatory every frame. Show the most important line with variable values (e.g., 'if nums[1] < 9').
-6. 'explanation': Extremely concise (< 10 words).
-7. 'event': MUST be one of function_call | loop_iteration | comparison | assignment | return | branch_true | branch_false | swap | recurse | base_case.
-8. DIFF-ONLY OUTPUT (CRITICAL):
-   - FRAME 0 MUST INCLUDE ALL VARIABLES: You MUST output the full string/array and any sets/maps in 'v' in the very first frame so the frontend can see them!
-   - AFTER FRAME 0, NEVER REPEAT UNCHANGED DATA. The backend deep merges everything!
-   - 'd' (dataStructureState): OMIT entirely if nothing changed. If it changed, output ONLY the specific properties that changed.
-   - For 'd.nd' (nodes), output ONLY nodes that changed.
-   - 'v' (variables): Output ONLY variables that changed. OMIT unchanged properties within them.
-9. 'returnValue': EXACT primitive only (e.g. "0").
-10. ARRAY AS BINARY TREE: Input is LeetCode level-order format (children of nulls are skipped!). DO NOT hallucinate left/right indices using 2*i+1. Use the provided CRITICAL TREE JSON HINT.
-11. DATA STRUCTURE TAXONOMY & PRIORITY (CRITICAL): MUST use EXACTLY ONE 'dataStructureState.type'.
-   PRIORITY RULES: Rich visualizers (trees, graphs, windows) ALWAYS override helper structures (maps, sets, queues).
-   [PRIORITY 1 - Topology]:
-   - binary_tree/linked_list: nodes[] array (id, val, next/left/right, highlight, label).
-   - graph: Adjacency list.
-   - trie: nested dictionary, NEVER node arrays.
-   [PRIORITY 2 - Algorithmic]:
-   - sliding_window: MUST use this if the algorithm uses a moving window (e.g. left/right pointers). You MUST output 'w': [left_index, right_index] to draw the box!
-   - two_pointers: Use if algorithm has two independent pointers (e.g. left/right, slow/fast).
-   - interval: 2D array [start, end].
-   [PRIORITY 3 - Arrays/Matrices]:
-   - matrix: 2D grids/boards.
-   - array: 1D arrays/strings.
-   [PRIORITY 4 - Helpers (ONLY use if NO Priority 1-3 structure exists!)]:
-   - hashmap: key-value state.
-   - set: flat array.
-   - stack/queue: array.
-   - priority_queue: ALWAYS flat 0-indexed array, NEVER objects.
-   [OTHER]:
-   - union_find: 'parent' & 'rank' arrays.
-   - segment_tree/fenwick_tree: flat 0-indexed array, NEVER objects.
-   - prefix_sum: cumulative sums array.
-   - monotonic_stack: find next greater/smaller.
-   - bitwise: raw ints.
-   - recursion: implicit call stack.
-   - generic: fallback.
-
-10. CHAIN OF THOUGHT (CRITICAL FOR MATH & RECURSION):
-    Write a VERY BRIEF '<scratchpad>' block BEFORE the JSON. Mentally trace the math and execution path using highly compact notation (e.g., "5->4->11->7=27!=22. Backtrack 11->2=22. True"). Keep it to a few words to strictly save tokens, but maintain accuracy!
-    <scratchpad>
-    S1: left=maxDepth(9)
-    ...
-    </scratchpad>
-    \`\`\`json
-    { ... }
-    \`\`\`
-
-11. STRICT JSON FORMATTING (CRITICAL):
-    - NO unescaped double quotes inside strings! Use SINGLE QUOTES for code and values (e.g., "c": "if (char === 'a')").
-    - NO unescaped newlines (\n) inside string values.
-    - NO JS-only types like undefined, NaN, Infinity. Use null or strings instead.
-    - NO trailing commas.
-12. DP METADATA: If DP, include 'dp_derivation: [idx1, idx2]' if possible.
-
-JSON SCHEMA TO FOLLOW EXACTLY:
-{
-  "metadata": {"algorithm": "Name", "dataStructure": "Main DS", "timeComplexity": "O(?)", "spaceComplexity": "O(?)"},
-  "frames": [
-    {
-      "line": <number>,
-      "event": "<function_call | loop_iteration | comparison | assignment | return | branch_true | branch_false | swap | recurse | base_case>",
-      "c": "code with var values",
-      "e": "Human-readable (<10 words)",
-      "v": {
-        "varName": <value/object> // MUST BE VALID JSON! Output sets as arrays. NO raw JS like 'new Set()'.
-      },
-      "d": {
-        "t": "array|binary_tree|graph|linked_list|stack|queue|hashmap|sliding_window|bitwise|generic",
-        "n": "<EXACT_VAR_NAME>", // e.g., "s" or "nums". MUST MATCH the variable name in 'v'!
-        "p": {"i": 0, "left": 0}, "w": [0, 3], "h": [0, 3],
-        "nd": [{"id": 0, "val": 3, "left": 1, "right": 2, "next": 1, "highlight": "active|visited|none", "label": "curr"}]
-      },
-      "cs": ["dfs(root, 2)", "dfs(root.left, 1)"], // FULL unbroken call stack array. STRICTLY use short labels! NEVER expand arrays/objects in args!
-      "returnValue": "..."
-    }
-  ],
-  "result": <final value>
-}
-
-Test Input: ${JSON.stringify(testInput)}${buildTreeHint(testInput)}
-
-User Code:
-${runnableCode}`;
+  const analysis = await analyzeCode(language, code, effectiveKey);
+  const systemPrompt = buildPrompt(analysis, language, runnableCode, testInput, buildTreeHint);
 
   try {
     const systemMessage = systemPrompt.split("Test Input:")[0];
-    const userMessage = "Test Input:" + systemPrompt.split("Test Input:")[1] + "\n\nCRITICAL: Provide full output containing all essential algorithm steps. You MUST reach the final return statement. Combine mundane steps and skip trivial initialization lines to save space.";
+    const userMessage = "Test Input:" + systemPrompt.split("Test Input:")[1];
 
     const completion = await groq.chat.completions.create({
       messages: [
@@ -412,7 +325,40 @@ ${runnableCode}`;
             if (!(k in f.variables)) {
               f.variables[k] = JSON.parse(JSON.stringify(prevVars[k]));
             } else if (typeof f.variables[k] === 'object' && typeof prevVars[k] === 'object') {
-              f.variables[k] = { ...prevVars[k], ...f.variables[k] };
+              const curVal = f.variables[k].value;
+              const prevVal = prevVars[k].value;
+
+              if (curVal && typeof curVal === 'object' && !Array.isArray(curVal) && ('_add' in curVal || '_remove' in curVal || '_set' in curVal)) {
+                let newVal = Array.isArray(prevVal) ? [...prevVal] : (typeof prevVal === 'object' && prevVal !== null ? {...prevVal} : prevVal);
+
+                if ('_remove' in curVal && Array.isArray(curVal._remove)) {
+                  curVal._remove.forEach(item => {
+                    if (Array.isArray(newVal)) {
+                      const idx = newVal.indexOf(item);
+                      if (idx > -1) newVal.splice(idx, 1);
+                    } else if (typeof newVal === 'object') {
+                      delete newVal[item];
+                    }
+                  });
+                }
+                
+                if ('_add' in curVal && Array.isArray(curVal._add)) {
+                  if (Array.isArray(newVal)) newVal.push(...curVal._add);
+                }
+                
+                if ('_set' in curVal && typeof curVal._set === 'object') {
+                  for (const [sKey, sVal] of Object.entries(curVal._set)) {
+                    if (Array.isArray(newVal)) {
+                      newVal[parseInt(sKey)] = sVal;
+                    } else if (typeof newVal === 'object') {
+                      newVal[sKey] = sVal;
+                    }
+                  }
+                }
+                f.variables[k] = { ...prevVars[k], value: newVal };
+              } else {
+                f.variables[k] = { ...prevVars[k], ...f.variables[k] };
+              }
             }
           }
         }
@@ -435,7 +381,9 @@ ${runnableCode}`;
     return {
       success: true,
       frames: result.frames || [],
-      result: result.result
+      result: result.result,
+      algorithmName: result.algorithmName || null,
+      isSummarized: result.isSummarized || false
     };
 
   } catch (error) {
@@ -462,33 +410,53 @@ async function expandTrace(editorMode, language, code, testInput, apiKey, judge0
   const groq = new Groq({ apiKey: effectiveKey });
   const runnableCode = generateDriver(language, code, testInput);
 
+const cleanFrame = (f) => {
+  if (!f) return null;
+  const cleaned = { line: f.line, event: f.event, c: f.codeWithValues, e: f.explanation, v: {}, d: {} };
+  if (f.variables) {
+    for (const [k, v] of Object.entries(f.variables)) {
+      if (k !== 'skippedNext') cleaned.v[k] = v.value;
+    }
+  }
+  if (f.dataStructureState) {
+    cleaned.d.t = f.dataStructureState.type;
+    cleaned.d.n = f.dataStructureState.name;
+    if (f.dataStructureState.pointers) cleaned.d.p = f.dataStructureState.pointers;
+    if (f.dataStructureState.window) cleaned.d.w = f.dataStructureState.window;
+  }
+  if (Object.keys(cleaned.d).length === 0) delete cleaned.d;
+  if (Object.keys(cleaned.v).length === 0) delete cleaned.v;
+  return cleaned;
+};
+
+const cleanStart = cleanFrame(startFrame);
+const cleanEnd = cleanFrame(endFrame);
+
   const systemPrompt = `You are a strict code visualizer. Mentally execute the ${language} code and output a JSON trace. NO markdown outside JSON.
 
 CRITICAL INSTRUCTIONS:
-1. TARGETED EXPANSION: The user has requested to dig deeper between State A and State B of a summarized trace. You must output the missing intermediate state changes strictly between these two states. If there are NO meaningful conceptual steps missing between State A and State B, you MUST output exactly '{"frames": []}' to refuse expansion! DO NOT hallucinate filler frames!
+1. TARGETED EXPANSION: The user has requested to dig deeper between State A and State B. You must output the missing intermediate state changes strictly between these two states. Even if the missing steps are repetitive loops or recursive calls, you MUST output them so the user can see the changing variable states! ONLY refuse (by outputting '{"frames": []}') if State B immediately follows State A in execution with absolutely NO skipped lines.
 2. START & END BOUNDARIES: Start generating frames immediately AFTER State A. Stop generating frames immediately BEFORE State B. 
-3. DETAILED DEBUGGING: Output a frame for meaningful execution lines, but skip entirely trivial operations that do not change the state or conceptual flow.
-4. FRAME LIMIT (CRITICAL): DO NOT generate more than 10 frames. Pick the most important 5 to 10 intermediate frames that bridge the gap conceptually without overwhelming the user.
-5. 'dataStructureState': MUST use a non-generic type if a primary structure exists. Forbidden to use "type": "generic" if there is a structure.
-6. 'codeWithValues': Mandatory every frame. Show the most important line with variable values.
-7. 'explanation': Extremely concise (< 10 words).
-8. 'event': MUST be one of function_call | loop_iteration | comparison | assignment | return | branch_true | branch_false | swap | recurse | base_case.
-9. DIFF-ONLY OUTPUT (CRITICAL):
+3. RECURSIVE EXPAND & FRAME LIMIT: DO NOT generate more than 10 frames. If there are more than 10 missing steps, YOU MUST SUMMARIZE. Pick the most important 5 to 10 intermediate frames.
+4. ONLY ONE GAP ALLOWED: If you summarize, you MUST add '"skippedNext": true' to ONLY ONE frame (the exact frame immediately BEFORE the gap). DO NOT add 'skippedNext' to every frame! This allows the user to expand again recursively.
+5. GRANULARITY: Provide the missing loop iterations or recursive calls, but do NOT break them down into microscopic steps. Combine related operations (e.g., 'set.remove()' and 'left++') into a single frame per conceptual step, exactly like the high-level trace does. Do not clutter the timeline with isolated trivial micro-frames.
+6. 'dataStructureState': MUST use a non-generic type if a primary structure exists. Forbidden to use "type": "generic" if there is a structure.
+7. 'codeWithValues' (CRITICAL): You MUST substitute the actual variable values directly into the code snippet! DO NOT just output the raw code. (e.g., output 'Math.max(3, 7 - 0 + 1)' instead of 'Math.max(maxLength, right - left + 1)').
+8. 'explanation': Extremely concise (< 10 words).
+9. 'event': MUST be one of function_call | loop_iteration | comparison | assignment | return | branch_true | branch_false | swap | recurse | base_case.
+10. DIFF-ONLY OUTPUT (CRITICAL):
    - FRAME 0 MUST INCLUDE ALL VARIABLES: You MUST output the full string/array and any sets/maps in 'v' in the very first frame!
    - AFTER FRAME 0, NEVER REPEAT UNCHANGED DATA.
-   - RECURSION: If a function is called or returns in these intermediate steps, you MUST include the 'recursionTree' object with the added or updated node.
-
+   - SMART DELTAS FOR COLLECTIONS: NEVER output full arrays/sets/maps after Frame 0! Use {"_add": ["c"]}, {"_remove": ["a"]}, or {"_set": {"idx": 2}}.
+   - CALL STACK ('cs'): OMIT ENTIRELY unless the algorithm is recursive. Do not output 'cs' for simple loops.
+   
 10. BRIEF SCRATCHPAD ALLOWED:
     You MUST write a 1-2 line <scratchpad> to trace the recursive math and call stack so you don't hallucinate!
-    <scratchpad>
-    Trace: ...
-    </scratchpad>
 
 11. STRICT JSON FORMATTING (CRITICAL):
-    - NO unescaped double quotes inside strings! Use SINGLE QUOTES for code and values (e.g., "c": "if (char === 'a')").
+    - JSON values MUST be wrapped in double quotes. If you need quotes INSIDE a string, use single quotes (e.g. "c": "set.add('a')").
     - NO unescaped newlines (\n) inside string values.
     - NO JS-only types like undefined, NaN, Infinity. Use null or strings instead.
-    - NO trailing commas.
 
 JSON SCHEMA TO FOLLOW EXACTLY:
 {
@@ -518,10 +486,10 @@ User Code:
 ${runnableCode}
 
 State A (Start Point):
-${JSON.stringify(startFrame)}
+${JSON.stringify(cleanStart)}
 
 State B (End Point):
-${JSON.stringify(endFrame)}`;
+${JSON.stringify(cleanEnd)}`;
 
   try {
     const systemMessage = systemPrompt.split("State A (Start Point):")[0];

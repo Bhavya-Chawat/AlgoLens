@@ -9,6 +9,8 @@ import AIDebugAssistant from '../components/AIDebugAssistant';
 import TestcaseLab from '../components/TestcaseLab';
 import DiffDebugger from '../components/DiffDebugger';
 
+import CodeEditor from '../components/CodeEditor';
+
 // ============================================================
 // BUGS PANEL (Moved to left panel below Code Editor)
 // ============================================================
@@ -257,8 +259,13 @@ function LeftPanel({ isOpen, onToggle, activeLine }) {
                 </div>
               )}
 
+              {/* Code Viewer */}
+              <div style={{ padding: '0 16px 16px', flex: 1, minHeight: 300, display: 'flex', flexDirection: 'column' }}>
+                <CodeEditor mode="readonly" activeLineIndex={activeLine} />
+              </div>
+
               {/* Back to Editor button */}
-              <div style={{ padding: '0 16px 16px' }}>
+              <div style={{ padding: '0 16px 16px', flexShrink: 0 }}>
                 <button
                   onClick={() => update({ view: 'editor' })}
                   style={{
@@ -275,7 +282,7 @@ function LeftPanel({ isOpen, onToggle, activeLine }) {
                 </button>
               </div>
 
-              <div style={{ height: 1, background: 'var(--border)', margin: '0 16px 16px' }} />
+              <div style={{ height: 1, background: 'var(--border)', margin: '0 16px 16px', flexShrink: 0 }} />
               <BugsPanel />
               <ProblemCard />
             </>

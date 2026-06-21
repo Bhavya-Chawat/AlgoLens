@@ -131,7 +131,7 @@ const Timeline = React.memo(function Timeline({
 
   const jumpToLastReturn = () => {
     for (let i = total - 1; i >= 0; i--) {
-      if (executionTrace[i].eventType === 'return') {
+      if (executionTrace[i].event === 'return') {
         doUpdate({ currentFrame: i, isPlaying: false });
         break;
       }
@@ -238,15 +238,24 @@ const Timeline = React.memo(function Timeline({
       });
 
       if (expandedFrames.length > 0) {
+        const cleanedCurrentFrame = { ...executionTrace[currentFrame] };
+        delete cleanedCurrentFrame.skippedNext;
+        if (cleanedCurrentFrame.variables?.skippedNext) {
+          cleanedCurrentFrame.variables = { ...cleanedCurrentFrame.variables };
+          delete cleanedCurrentFrame.variables.skippedNext;
+        }
+
         const newTrace = [
-          ...executionTrace.slice(0, currentFrame + 1),
+          ...executionTrace.slice(0, currentFrame),
+          cleanedCurrentFrame,
           ...expandedFrames,
           ...executionTrace.slice(currentFrame + 1)
         ];
         update({ executionTrace: newTrace, globalLoading: false });
       } else {
-        update({ globalLoading: false });
-        alert("Cannot expand further! There are no additional hidden steps between these two frames.");
+        const newTrace = [...executionTrace];
+        newTrace[currentFrame] = { ...newTrace[currentFrame], _noExpandAvailable: true };
+        update({ executionTrace: newTrace, globalLoading: false });
       }
     } catch (err) {
       update({ globalLoading: false });
@@ -562,24 +571,29 @@ const Timeline = React.memo(function Timeline({
             <QuickJumpBtn icon={<AlertTriangle size={10} />} label="First Bug" onClick={jumpToFirstBug} disabled={!detectedBugs.length} />
             <QuickJumpBtn icon={<CornerDownLeft size={10} />} label="Last Return" onClick={jumpToLastReturn} />
           </div>
-          <button
-            onClick={handleGoDeeper}
-            disabled={currentFrame >= total - 1}
-            style={{
-              padding: '6px', borderRadius: 4,
-              background: 'rgba(143,175,157,0.1)', border: '1px solid rgba(143,175,157,0.3)',
-              color: 'var(--accent-sage)', fontSize: 10, fontWeight: 600,
-              cursor: currentFrame >= total - 1 ? 'not-allowed' : 'pointer',
-              textTransform: 'uppercase', display: 'flex', justifyContent: 'center', gap: 4,
-              alignItems: 'center', transition: 'all 150ms ease',
-              opacity: currentFrame >= total - 1 ? 0.5 : 1
-            }}
-            onMouseEnter={e => { if(currentFrame < total - 1) e.currentTarget.style.background = 'rgba(143,175,157,0.2)' }}
-            onMouseLeave={e => { if(currentFrame < total - 1) e.currentTarget.style.background = 'rgba(143,175,157,0.1)' }}
-          >
-            <ZoomIn size={12} />
-            Expand Next Step
-          </button>
+          {state.isSummarized && !executionTrace[currentFrame]?._noExpandAvailable && (
+            executionTrace[currentFrame]?.skippedNext || 
+            executionTrace[currentFrame]?.variables?.skippedNext?.value
+          ) && (
+            <button
+              onClick={handleGoDeeper}
+              disabled={currentFrame >= total - 1}
+              style={{
+                padding: '6px', borderRadius: 4,
+                background: 'rgba(143,175,157,0.1)', border: '1px solid rgba(143,175,157,0.3)',
+                color: 'var(--accent-sage)', fontSize: 10, fontWeight: 600,
+                cursor: currentFrame >= total - 1 ? 'not-allowed' : 'pointer',
+                textTransform: 'uppercase', display: 'flex', justifyContent: 'center', gap: 4,
+                alignItems: 'center', transition: 'all 150ms ease',
+                opacity: currentFrame >= total - 1 ? 0.5 : 1
+              }}
+              onMouseEnter={e => { if(currentFrame < total - 1) e.currentTarget.style.background = 'rgba(143,175,157,0.2)' }}
+              onMouseLeave={e => { if(currentFrame < total - 1) e.currentTarget.style.background = 'rgba(143,175,157,0.1)' }}
+            >
+              <ZoomIn size={12} />
+              Expand Next Step
+            </button>
+          )}
         </div>
       </div>
 

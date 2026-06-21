@@ -83,7 +83,7 @@ export default function CallStackTab() {
 
             return (
               <div
-                key={`${entry.name}-${originalDepth}`}
+                key={`${typeof entry === 'string' ? entry : entry?.name}-${originalDepth}`}
                 style={{
                   marginLeft: indent,
                   padding: '10px 14px', borderRadius: 6,
@@ -101,14 +101,16 @@ export default function CallStackTab() {
                   color: isTop ? 'var(--text-primary)' : 'var(--text-secondary)',
                   fontWeight: isTop ? 600 : 400,
                 }}>
-                  {entry.name}()
+                  {typeof entry === 'string' ? entry : `${entry?.name || 'anonymous'}()`}
                 </div>
-                <div style={{
-                  fontFamily: 'var(--font-mono)', fontSize: 11,
-                  color: 'var(--text-muted)',
-                }}>
-                  line {entry.line}
-                </div>
+                {typeof entry !== 'string' && entry?.line && (
+                  <div style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 11,
+                    color: 'var(--text-muted)',
+                  }}>
+                    line {entry.line}
+                  </div>
+                )}
               </div>
             );
           })}

@@ -5,9 +5,9 @@ import { PLACEHOLDER_CODE, CUSTOM_PLACEHOLDER_CODE, LANGUAGE_EXT } from '../cons
 // ============================================================
 // LINE NUMBERS
 // ============================================================
-function LineNumbers({ lines, activeLineIndex }) {
+const LineNumbers = React.forwardRef(({ lines, activeLineIndex }, ref) => {
   return (
-    <div style={{
+    <div ref={ref} style={{
       width: 44, flexShrink: 0,
       fontFamily: 'var(--font-mono)',
       fontSize: 12,
@@ -17,6 +17,7 @@ function LineNumbers({ lines, activeLineIndex }) {
       lineHeight: '1.65',
       userSelect: 'none',
       borderRight: '1px solid var(--border)',
+      overflow: 'hidden',
     }}>
       {lines.map((_, i) => (
         <div key={i} style={{
@@ -30,7 +31,7 @@ function LineNumbers({ lines, activeLineIndex }) {
       ))}
     </div>
   );
-}
+});
 
 // ============================================================
 // CODE EDITOR
@@ -44,6 +45,7 @@ export default function CodeEditor({
   const { state, update } = useApp();
   const textareaRef = useRef(null);
   const activeLineRef = useRef(null);
+  const lineNumbersRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const placeholders = state.editorMode === 'leetcode' ? PLACEHOLDER_CODE : CUSTOM_PLACEHOLDER_CODE;
   // If code is empty, lines will just be [''] which correctly renders line 1
@@ -59,18 +61,17 @@ export default function CodeEditor({
       const containerRect = container.getBoundingClientRect();
       const elRect = el.getBoundingClientRect();
       
-      const isVisible = (
-        elRect.top >= containerRect.top &&
-        elRect.bottom <= containerRect.bottom
-      );
-      
-      if (!isVisible) {
-        // Scroll so the active line is roughly in the middle
-        const scrollTop = el.offsetTop - containerRect.height / 2 + elRect.height / 2;
-        container.scrollTo({ top: scrollTop, behavior: 'smooth' });
-      }
+      // Always keep the active line roughly in the middle for playback focus
+      const scrollTop = el.offsetTop - containerRect.height / 2 + elRect.height / 2;
+      container.scrollTo({ top: scrollTop, behavior: 'smooth' });
     }
   }, [activeLineIndex, mode]);
+
+  const handleScroll = useCallback((e) => {
+    if (lineNumbersRef.current) {
+      lineNumbersRef.current.scrollTop = e.target.scrollTop;
+    }
+  }, []);
 
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Tab') {
@@ -125,7 +126,7 @@ export default function CodeEditor({
 
       {/* Editor body */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
-        <LineNumbers lines={lines} activeLineIndex={activeLineIndex} />
+        <LineNumbers ref={lineNumbersRef} lines={lines} activeLineIndex={activeLineIndex} />
 
         {mode === 'edit' ? (
           <textarea
@@ -134,6 +135,7 @@ export default function CodeEditor({
             value={state.code}
             onChange={(e) => update({ code: e.target.value })}
             onKeyDown={handleKeyDown}
+            onScroll={handleScroll}
             placeholder={placeholders[state.language]}
             spellCheck={false}
             autoCorrect="off"
@@ -155,8 +157,10 @@ export default function CodeEditor({
           /* Read-only rendered lines */
           <div 
             ref={scrollContainerRef}
+            onScroll={handleScroll}
             style={{
               flex: 1, overflowY: 'auto',
+              position: 'relative',
               padding: '14px 0',
               scrollBehavior: 'smooth',
             }}

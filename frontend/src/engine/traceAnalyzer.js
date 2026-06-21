@@ -81,7 +81,7 @@ export function summarizeTrace(trace, code, testInput, bugs, leetcodeProblem) {
   return summary;
 }
 
-export function buildPrompt(summary) {
+export function buildPrompt(summary, isSummarized) {
   return `Analyze this execution trace:
 
 LeetCode Problem Context:
@@ -94,7 +94,7 @@ Language: ${summary.language}
 Test input: ${summary.testInput}
 Actual output: ${summary.actualOutput}
 Total execution frames: ${summary.totalFrames}
-
+${isSummarized ? '\nNOTE: This execution trace has been summarized for brevity. Some intermediate repetitive loop iterations have been omitted. The variable final states reflect the true end state. DO NOT assume the code is broken just because some loop steps are missing from the trace.\n' : ''}
 Variable activity:
 ${summary.variableChanges.join('\n')}
 

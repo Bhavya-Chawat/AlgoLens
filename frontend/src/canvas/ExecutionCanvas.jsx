@@ -564,10 +564,22 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
             transform: `translate(${panRef.current.x}px, ${panRef.current.y}px) scale(${zoom})`,
             transition: isPanning ? 'none' : 'transform 100ms ease',
             minWidth: 'max-content',
-            willChange: 'transform',
           }}
-        >{/* ── BADGES: Event / Algo / DS ── */}
+        >
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
+          {state.algorithmName && (
+            <span style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              padding: '4px 10px', borderRadius: 14,
+              background: 'rgba(143,175,157,0.15)',
+              border: '1px solid rgba(143,175,157,0.4)',
+              color: 'var(--accent-sage)', fontSize: 11, fontWeight: 700,
+              boxShadow: '0 0 10px rgba(143,175,157,0.2)',
+              letterSpacing: '0.02em', textTransform: 'uppercase'
+            }}>
+              <span style={{ fontSize: 12 }}>⚡</span> {state.algorithmName}
+            </span>
+          )}
           <EventBadge type={frame.event || frame.eventType} />
           <span style={{
             fontSize: 11, fontFamily: 'var(--font-mono)',
@@ -720,7 +732,7 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
         )}
 
         {/* ── ARRAY / STRING / SET + POINTERS ── */}
-        {(['array', 'sliding_window', 'array_hashmap', 'recursion', 'set', 'hashmap', 'prefix_sum'].includes(detected.type) && !['interval', 'union_find', 'sorting_bar_chart', 'dp_table', 'chessboard', 'string_matcher'].includes(detected.type)) &&
+        {(['array', 'string', 'sliding_window', 'array_hashmap', 'recursion', 'set', 'hashmap', 'prefix_sum'].includes(detected.type) && !['interval', 'union_find', 'sorting_bar_chart', 'dp_table', 'chessboard', 'string_matcher'].includes(detected.type)) &&
           detected.arrays && detected.arrays.length > 0 && (
             <Section label="Arrays">
               {detected.arrays.map((arr, idx) => (
@@ -733,10 +745,11 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
                     pointers={arr.name === detected.mainArray?.name ? detected.pointers : {}}
                     slidingWindow={
                       arr.name === detected.mainArray?.name
-                        ? (('left' in detected.pointers && 'right' in detected.pointers) ? [detected.pointers.left, detected.pointers.right]
-                           : ('start' in detected.pointers && 'end' in detected.pointers) ? [detected.pointers.start, detected.pointers.end]
-                           : ('l' in detected.pointers && 'r' in detected.pointers) ? [detected.pointers.l, detected.pointers.r]
-                           : null)
+                        ? (frame?.dataStructureState?.window ||
+                           ('left' in detected.pointers && 'right' in detected.pointers ? [detected.pointers.left, detected.pointers.right]
+                           : 'start' in detected.pointers && 'end' in detected.pointers ? [detected.pointers.start, detected.pointers.end]
+                           : 'l' in detected.pointers && 'r' in detected.pointers ? [detected.pointers.l, detected.pointers.r]
+                           : null))
                         : null
                     }
                     isBugFrame={isBugFrame}

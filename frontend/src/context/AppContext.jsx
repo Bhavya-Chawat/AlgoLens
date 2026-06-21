@@ -28,8 +28,8 @@ const INITIAL_STATE = {
   editorMode: savedSession.editorMode || 'custom',      // 'custom' | 'leetcode'
   leetcodeProblem: savedSession.leetcodeProblem || null,
   isLeetcodeModalOpen: false,
-  language: 'python',
-  code: savedCodeByLang.python || '',
+  language: 'java',
+  code: savedCodeByLang.java || '',
   codeByLanguage: savedCodeByLang,
   testInput: '',
   customInputs: savedSession.customInputs || [{ key: 'nums', val: '[1, 2, 3, 4, 5]' }],

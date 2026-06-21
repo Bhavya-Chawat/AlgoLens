@@ -91,7 +91,7 @@ export default function AIDebugAssistant({ isOpen, onClose }) {
 
     try {
       const summary = summarizeTrace(executionTrace, state.lastExecutedCode, testcase, detectedBugs, state.leetcodeProblem);
-      const userPrompt = buildPrompt(summary);
+      const userPrompt = buildPrompt(summary, state.isSummarized);
 
       const response = await fetch('http://localhost:3000/api/hint', {
         method: 'POST',
