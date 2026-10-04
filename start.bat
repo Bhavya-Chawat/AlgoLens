@@ -1,38 +1,55 @@
 @echo off
-echo Cleaning up previously running ports (3000, 5173, 5174)...
+setlocal
+cd /d "%~dp0"
 
-:: Kill process on port 3000 (Backend)
-FOR /F "tokens=5" %%T IN ('netstat -a -n -o ^| findstr :3000') DO (taskkill /F /PID %%T 2>NUL)
-:: Kill process on port 5173 (Frontend default)
-FOR /F "tokens=5" %%T IN ('netstat -a -n -o ^| findstr :5173') DO (taskkill /F /PID %%T 2>NUL)
-:: Kill process on port 5174 (Frontend fallback)
-FOR /F "tokens=5" %%T IN ('netstat -a -n -o ^| findstr :5174') DO (taskkill /F /PID %%T 2>NUL)
-
-echo Starting AlgoLens Full-Stack Environment...
-
-:: Check Backend dependencies
-cd backend
-IF NOT EXIST "node_modules\" (
-    echo [Backend] node_modules not found. Installing dependencies...
-    call npm install
+where node >nul 2>nul
+if errorlevel 1 (
+    echo Node.js 20 or newer is required: https://nodejs.org
+    pause
+    exit /b 1
 )
-cd ..
 
-:: Check Frontend dependencies
-cd frontend
-IF NOT EXIST "node_modules\" (
-    echo [Frontend] node_modules not found. Installing dependencies...
-    call npm install
+echo Freeing ports 3000, 5173 and 5174 if a previous AlgoLens is still listening...
+for %%P in (3000 5173 5174) do (
+    for /f "tokens=5" %%T in ('netstat -a -n -o ^| findstr /R /C:":%%P .*LISTENING"') do taskkill /F /PID %%T >nul 2>nul
 )
-cd ..
 
-echo [Frontend & Backend] Launching in Windows Terminal tabs...
-wt -d .\backend cmd /k "title AlgoLens Backend && npm start" ; new-tab -d .\frontend cmd /k "title AlgoLens Frontend && npm run dev"
+:: Dependencies (the frontend's install also copies the Python runtime next to the app)
+if not exist "backend\node_modules\" (
+    echo [Backend] Installing dependencies...
+    pushd backend
+    call npm install
+    popd
+)
+if not exist "frontend\node_modules\" (
+    echo [Frontend] Installing dependencies...
+    pushd frontend
+    call npm install
+    popd
+)
+
+:: Java and C++ run in a Docker sandbox; Python and JavaScript do not need it
+docker info >nul 2>nul
+if errorlevel 1 (
+    echo.
+    echo [Note] Docker is not running or not installed. Python and JavaScript work without it.
+    echo        For Java and C++ install and start Docker Desktop, then run them from the app.
+    echo.
+)
+
+echo Starting AlgoLens...
+where wt >nul 2>nul
+if errorlevel 1 (
+    start "AlgoLens Backend" /d "%~dp0backend" cmd /k "npm start"
+    start "AlgoLens Frontend" /d "%~dp0frontend" cmd /k "npm run dev"
+) else (
+    wt -d "%~dp0backend" cmd /k "title AlgoLens Backend && npm start" ; new-tab -d "%~dp0frontend" cmd /k "title AlgoLens Frontend && npm run dev"
+)
 
 echo.
 echo ========================================================
-echo AlgoLens is starting up! 
-echo Frontend will be available at: http://localhost:5173
-echo Backend API will be available at: http://localhost:3000
+echo AlgoLens is starting up!
+echo App:         http://localhost:5173
+echo Backend API: http://localhost:3000  (this computer only)
 echo ========================================================
 echo You can close this window at any time.

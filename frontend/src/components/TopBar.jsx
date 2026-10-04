@@ -1,7 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Search, ChevronDown, Play, Sun, Moon, ArrowLeft, Eye } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Search, ChevronDown, Play, Sun, Moon, Eye } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { LANGUAGE_LABELS, CUSTOM_PLACEHOLDER_CODE } from '../constants/placeholders';
+import ApiKeySettings from './ApiKeySettings';
+import ExamplesMenu from './ExamplesMenu';
+import { LANGUAGE_LABELS, LEETCODE_LANG } from '../constants/placeholders';
 
 // ============================================================
 // LANGUAGE SELECTOR DROPDOWN
@@ -71,7 +73,7 @@ function LanguageSelector() {
                 let newCode;
                 // If we are in LeetCode mode and have a fetched problem, switch to the new language's snippet
                 if (state.editorMode === 'leetcode' && state.leetcodeProblem?.snippets) {
-                  const snippet = state.leetcodeProblem.snippets.find(s => s.langSlug.toLowerCase() === newLang.toLowerCase());
+                  const snippet = state.leetcodeProblem.snippets.find(s => s.langSlug === LEETCODE_LANG[newLang]);
                   newCode = snippet ? snippet.code : (updatedCodeByLang[newLang] || '');
                 } else {
                   // Restore previously saved code for this language, or empty
@@ -137,147 +139,6 @@ function ThemeToggle() {
 }
 
 // ============================================================
-// API KEY SETTINGS
-// ============================================================
-function ApiKeySettings() {
-  const { state, update } = useApp();
-  const [open, setOpen] = useState(false);
-  const [groqKeyInput, setGroqKeyInput] = useState(state.customApiKey);
-  const [judge0KeyInput, setJudge0KeyInput] = useState(state.judge0ApiKey);
-  const ref = useRef(null);
-
-  useEffect(() => {
-    const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const handleSave = () => {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('algolens-apikey', groqKeyInput);
-      localStorage.setItem('algolens-judge0-apikey', judge0KeyInput);
-    }
-    update({ customApiKey: groqKeyInput, judge0ApiKey: judge0KeyInput });
-    setOpen(false);
-  };
-
-  const handleClear = () => {
-    setGroqKeyInput('');
-    setJudge0KeyInput('');
-    if (typeof localStorage !== 'undefined') {
-      localStorage.removeItem('algolens-apikey');
-      localStorage.removeItem('algolens-judge0-apikey');
-    }
-    update({ customApiKey: '', judge0ApiKey: '' });
-    setOpen(false);
-  };
-
-  const isCustomGroq = !!state.customApiKey;
-  const isCustomJudge0 = !!state.judge0ApiKey;
-  const isCustom = isCustomGroq || isCustomJudge0;
-
-  return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      <button
-        onClick={() => setOpen((o) => !o)}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          padding: '4px 10px',
-          background: isCustom ? 'rgba(143,175,157,0.1)' : 'transparent',
-          border: `1px solid ${isCustom ? 'var(--accent-sage)' : 'var(--border)'}`,
-          borderRadius: 20,
-          color: isCustom ? 'var(--accent-sage)' : 'var(--text-secondary)',
-          fontSize: 'var(--text-body)',
-          fontFamily: 'var(--font-sans)',
-          cursor: 'pointer',
-          transition: 'all var(--motion-standard)',
-        }}
-      >
-        <span style={{ fontSize: 12 }}>🔑</span>
-        <span style={{ fontWeight: 500 }}>{isCustom ? 'Custom Keys' : 'API Settings'}</span>
-      </button>
-
-      {open && (
-        <div style={{
-          position: 'absolute', top: 'calc(100% + 8px)', right: 0,
-          width: 320, padding: 16,
-          background: 'var(--bg-card)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-lg)',
-          boxShadow: 'var(--shadow-panel)',
-          zIndex: 200, animation: 'fadeIn 140ms ease forwards',
-        }}>
-          <button 
-            onClick={() => setOpen(false)}
-            style={{
-              position: 'absolute', top: 12, right: 12,
-              background: 'transparent', border: 'none', color: 'var(--text-muted)',
-              cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              borderRadius: 4
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-canvas)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
-          >
-            <span style={{ fontSize: 16, lineHeight: 1 }}>×</span>
-          </button>
-          
-          {/* Groq Key Input */}
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Groq API Key</div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, lineHeight: 1.4 }}>
-            Overrides the <code style={{background:'var(--bg-canvas)', padding:'2px 4px', borderRadius:4}}>.env</code> key for code tracing and testcase extraction.
-          </div>
-          <input
-            type="password"
-            value={groqKeyInput}
-            onChange={(e) => setGroqKeyInput(e.target.value)}
-            placeholder="gsk_..."
-            style={{
-              width: '100%', padding: '8px 10px',
-              background: 'var(--bg-canvas)', border: '1px solid var(--border)',
-              borderRadius: 6, color: 'var(--text-primary)',
-              fontSize: 12, fontFamily: 'var(--font-mono)', marginBottom: 16,
-              outline: 'none'
-            }}
-          />
-
-          {/* Judge0 Key Input */}
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Judge0 API Key (RapidAPI)</div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, lineHeight: 1.4 }}>
-            Enables cloud execution. If left empty, AlgoLens will use your local machine's native compilers instead.
-          </div>
-          <input
-            type="password"
-            value={judge0KeyInput}
-            onChange={(e) => setJudge0KeyInput(e.target.value)}
-            placeholder="RapidAPI Key..."
-            style={{
-              width: '100%', padding: '8px 10px',
-              background: 'var(--bg-canvas)', border: '1px solid var(--border)',
-              borderRadius: 6, color: 'var(--text-primary)',
-              fontSize: 12, fontFamily: 'var(--font-mono)', marginBottom: 16,
-              outline: 'none'
-            }}
-          />
-
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={handleClear} style={{
-              flex: 1, padding: '6px', background: 'var(--bg-canvas)', color: 'var(--text-primary)',
-              border: '1px solid var(--border)', borderRadius: 6, fontSize: 12, cursor: 'pointer'
-            }}>Clear Both</button>
-            <button onClick={handleSave} style={{
-              flex: 1, padding: '6px', background: 'var(--accent-sage)', color: '#fff',
-              border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer'
-            }}>Save Keys</button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ============================================================
 // ============================================================
 // DEBUG BUTTONS (Editor View CTAs in topbar)
 // ============================================================
@@ -291,6 +152,8 @@ function ActionButtons({ onRun, onVisualise }) {
         <button
           onClick={onRun}
           disabled={busy}
+          title="Run"
+          aria-label="Run"
           style={{
             display: 'flex', alignItems: 'center', gap: 6,
             padding: '6px 16px',
@@ -308,7 +171,7 @@ function ActionButtons({ onRun, onVisualise }) {
           onMouseLeave={(e) => { if (!busy) e.currentTarget.style.background = 'var(--bg-card)'; }}
         >
           <Play size={11} fill="currentColor" />
-          Run
+          <span className="hide-on-tablet">Run</span>
         </button>
       )}
 
@@ -316,6 +179,8 @@ function ActionButtons({ onRun, onVisualise }) {
         id="debug-visually-btn"
         onClick={onVisualise}
         disabled={busy}
+        title="Visualise"
+        aria-label="Visualise"
         style={{
           display: 'flex', alignItems: 'center', gap: 6,
           padding: '6px 16px',
@@ -344,12 +209,12 @@ function ActionButtons({ onRun, onVisualise }) {
               animation: 'spin 600ms linear infinite',
               display: 'inline-block', flexShrink: 0,
             }} />
-            Running…
+            <span className="hide-on-tablet">Running…</span>
           </>
         ) : (
           <>
             <Eye size={12} strokeWidth={2.5} />
-            Visualise
+            <span className="hide-on-tablet">Visualise</span>
           </>
         )}
       </button>
@@ -366,10 +231,11 @@ export default function TopBar({ onRun, onVisualise }) {
   const isVisualizer = state.view === 'visualizer';
 
   return (
+    // three columns (logo | view tabs | tools): the middle one stays centred and no column can slide under another
     <header style={{
       height: 'var(--topbar-height)',
-      display: 'flex', alignItems: 'center',
-      gap: 'var(--space-md)',
+      display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center',
+      columnGap: 'var(--space-md)',
       padding: '0 var(--space-xl)',
       background: 'var(--bg-card)',
       borderBottom: '1px solid var(--border)',
@@ -378,9 +244,9 @@ export default function TopBar({ onRun, onVisualise }) {
       position: 'relative',
     }}>
       {/* Logo */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, width: '200px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifySelf: 'start' }}>
         <Search size={13} style={{ color: 'var(--accent-sage)' }} />
-        <span style={{
+        <span className="hide-on-tablet" style={{
           fontFamily: 'var(--font-mono)',
           fontWeight: 600, fontSize: 14,
           color: 'var(--accent-sage)',
@@ -390,7 +256,7 @@ export default function TopBar({ onRun, onVisualise }) {
         </span>
       </div>
 
-      <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
         {/* Editor / Visualizer Segmented Control */}
         <div style={{
           display: 'flex',
@@ -436,7 +302,8 @@ export default function TopBar({ onRun, onVisualise }) {
         </div>
       </div>
 
-      <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '16px' }}>
+      <div style={{ justifySelf: 'end', display: 'flex', alignItems: 'center', gap: 'clamp(8px, 1.4vw, 16px)' }}>
+        <ExamplesMenu onVisualise={onVisualise} />
         <ApiKeySettings />
         <LanguageSelector />
         <div style={{ width: 1, height: 18, background: 'var(--border)' }} />

@@ -1,72 +1,91 @@
 # AlgoLens
 
-AlgoLens is an advanced, AI-powered algorithm visualizer and debugger designed to help developers and students seamlessly understand code execution flow. By converting static code into dynamic, line-by-line visual execution traces, AlgoLens demystifies complex algorithms and data structures.
+AlgoLens shows you what your code **really did**. You write (or import) a program, press run, and every step is recorded by a real debugger or tracer: the line that ran, the call stack and every variable. Then it is drawn as pictures: arrays, graphs, trees, heaps, DP tables, union-find, call trees. Step forward and back to find your own bug.
 
-![AlgoLens Architecture](https://via.placeholder.com/800x400.png?text=AlgoLens+Visualizer)
+Nothing is simulated. An earlier version asked an AI to guess the execution, and it made things up. Now the AI is an optional helper for hints only, and never produces a trace.
 
-## 🌟 Key Features
+## Languages
 
-- **Dynamic Visualizer**: Watch your variables change in real-time as your code executes line-by-line.
-- **Hybrid Execution Engine**: 
-  - **Local Execution Fallback**: Run Python, JavaScript, Java, and C++ safely on your local machine.
-  - **Judge0 Cloud Execution**: Optionally securely execute code in the cloud using Judge0.
-- **LeetCode Integration**: Paste a LeetCode URL, and AlgoLens will automatically fetch the problem description, code templates, optimal test cases, and estimate Time & Space complexity!
-- **AI Tracing Engine**: Powered by Groq LLMs, the tracing engine intelligently instruments your code to extract deep AST execution state without you having to write a single log statement.
+| Language | How it is traced | Needs |
+|---|---|---|
+| Python | `sys.settrace` inside Pyodide, in your browser | nothing |
+| JavaScript | Babel instrumenter in a Web Worker | nothing |
+| Java | the JDK's own debugger (JDI), inside a Docker sandbox | Docker Desktop (free) |
+| C++ | `g++` + `gdb` (Python API), inside a Docker sandbox | Docker Desktop (free) |
 
-## 🛠 Tech Stack
+Java and C++ run with `--network none` in a throw-away container. The first Java or C++ run builds its runner image automatically. That happens once, downloads base images (so it needs internet) and can take a few minutes.
 
-### Frontend
-- **React + Vite**: Fast, modern frontend architecture.
-- **Monaco Editor**: The same powerful code editor that powers VS Code.
-- **Lucide Icons**: Beautiful, consistent iconography.
-- **Framer Motion**: (Planned) Smooth UI state transitions.
+## Quick start (Windows)
 
-### Backend
-- **Node.js + Express**: Lightweight, fast API routing.
-- **Groq SDK**: Blazing fast AI inference for AST instrumentation and LeetCode HTML parsing.
-- **Puppeteer**: Headless browser automation to seamlessly scrape LeetCode problems.
-- **C++ (nlohmann/json) & Java (Gson)**: Industry-standard libraries securely bundled for robust backend execution fallbacks.
+You need [Node.js](https://nodejs.org) 20 or newer. For Java and C++ also install and start [Docker Desktop](https://www.docker.com/products/docker-desktop/).
 
-## 🚀 Getting Started
+```bash
+start.bat
+```
 
-### Prerequisites
-- Node.js v18+
-- Python 3.8+, Java 17+, G++ (for local execution fallbacks)
-- Groq API Key (for the AI tracing engine)
+It installs what is missing, frees the ports and opens the backend (`http://localhost:3000`) and the app (`http://localhost:5173`).
 
-### Installation
+Or by hand, in two terminals:
 
-1. **Clone the repository:**
-   \`\`\`bash
-   git clone https://github.com/yourusername/AlgoLens.git
-   cd AlgoLens
-   \`\`\`
+```bash
+cd backend && npm install && npm start
+cd frontend && npm install && npm run dev
+```
 
-2. **Setup the Backend:**
-   \`\`\`bash
-   cd backend
-   npm install
-   # Copy .env.example to .env and add: GROQ_API_KEY=your_key_here
-   npm start
-   \`\`\`
+## AI hints (optional)
 
-3. **Setup the Frontend:**
-   \`\`\`bash
-   cd ../frontend
-   npm install
-   npm run dev
-   \`\`\`
+Open Settings in the app and paste your own free [Groq key](https://console.groq.com/keys). It stays in your browser; your local server forwards it to Groq and nowhere else. Tracing never needs it. A hint sends your code plus a short summary of the run, typically a few hundred tokens, and nothing is sent until you press **Get Hint**. Asking again about the same run reuses the answer.
 
-4. **Open your browser:**
-   Navigate to `http://localhost:5173` to start visualizing!
+## How it works
 
-## 💡 How it works
+```
+ browser                                   local server (Node, 127.0.0.1:3000)        Docker
+ ┌───────────────────────────┐   Java/C++   ┌──────────────────────────────┐   job    ┌─────────────────┐
+ │ editor, examples, timeline│ ───────────► │ checks the request, finds the│ ───────► │ Java: JDI       │
+ │ Python + JS tracers       │              │ function to call, wraps it in│ ◄─────── │ C++:  g++ + gdb │
+ │ recognition engine + lenses◄───────────  │ a main(), starts the sandbox │  steps   └─────────────────┘
+ └───────────────────────────┘   trace      └──────────────────────────────┘
+```
 
-1. You write custom code or fetch a LeetCode problem.
-2. The code is sent to the backend where the **Groq AI AST Transformer** safely injects JSON print statements at every logical execution boundary.
-3. The backend executes the modified code (either locally or via Judge0) and captures the JSON execution trace output.
-4. The frontend parses this trace array and provides an interactive scrubbing UI for you to step forward and backward in time, rendering the complete state of memory at any given line!
+1. **Tracers** produce one common step format ("AlgoTrace"), so nothing downstream depends on the language.
+2. **The recognition engine** (`frontend/src/viz`) works out what each variable is from its shape, its history and how the code uses it (stack, queue, heap, graph, DP table, tree, union-find ...). Names are only hints. Where it is unsure, the plain Variables panel is still there.
+3. **Lenses** draw each recognised structure. The timeline folds long loops and nested calls ("beats"), and nothing is skipped: you can expand any fold.
 
-## 📜 License
+## Tests and lint
 
-MIT License. Feel free to use, modify, and distribute.
+```bash
+cd frontend && npm test && npm run lint     # recognition engine, tracers, lenses, hints, edge cases
+cd backend  && npm test                     # API security, inspector, LeetCode import, Groq client
+cd runner/java && node --test "test/*.test.mjs"      # needs Docker + the Java image
+cd runner/cpp  && node --test "test/*.test.mjs"      # needs Docker + the C++ image
+cd runner      && node --test "test/*.test.mjs"      # the recognition engine on real Java/C++ traces
+```
+
+The runner suites skip themselves when Docker or the images are missing.
+
+## Limits worth knowing
+
+- A run records at most 20,000 steps for Python and JavaScript and 5,000 for Java and C++ (a debugger sees roughly 300 steps a second). After that it stops with a note. Big values are cut in all four tracers: about 60 items per list, 40 keys per dict, 4 levels deep and 80 nodes per tree or list.
+- Structure recognition is heuristic. A layout it does not know is shown as plain variables rather than a picture.
+- Java and C++ need Docker. Without it the app says so and how to fix it; it never falls back to a guess.
+
+## Project layout
+
+```
+backend/            local API: /api/run, /api/inspect, /api/runner/*, /api/hint, /api/leetcode
+  services/exec     Docker runner client, C++ driver generator, trace collector
+  services/inspect  tree-sitter parse of Java/C++ entry points and parameters
+runner/             java/ (JDI tracer) and cpp/ (gdb tracer): Dockerfiles, sources, tests
+frontend/src/
+  tracers/          Python (Pyodide), JavaScript (Babel), adapter for Java/C++
+  core/             AlgoTrace -> frames, bug detectors, timeline folding
+  viz/              recognition engine (rec/) and lenses (ui/)
+  engine/           run orchestration, edge-case generator, hint prompts
+  constants/examples  the Examples menu
+```
+
+Backend settings are optional environment variables, see `backend/.env.example`.
+
+## License
+
+MIT

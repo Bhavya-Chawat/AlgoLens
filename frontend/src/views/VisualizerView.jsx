@@ -1,19 +1,59 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Zap, AlertTriangle, Bot } from 'lucide-react';
+import { Zap, AlertTriangle, Bot } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import TopBar from '../components/TopBar';
 import Timeline from '../components/Timeline';
 import ExecutionCanvas from '../canvas/ExecutionCanvas';
+import CodeEditor from '../components/CodeEditor';
 import InspectorPanel from '../components/inspector/InspectorPanel';
 import AIDebugAssistant from '../components/AIDebugAssistant';
 import TestcaseLab from '../components/TestcaseLab';
 import DiffDebugger from '../components/DiffDebugger';
+import { itemIndexFor } from '../core/beats';
+
+// ============================================================
+// TRACE BANNERS — explain what the canvas is showing
+// ============================================================
+function TraceBanners() {
+  const { state, beats } = useApp();
+  const item = beats.items[itemIndexFor(beats.items, state.currentFrame)];
+  const fold = item?.type === 'fold' ? item : null;
+  if (!fold) return null;
+
+  const pill = (bg, border, color) => ({
+    display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px', borderRadius: 10,
+    background: bg, border: `1px solid ${border}`, color, fontSize: 12, boxShadow: 'var(--shadow-panel)',
+    maxWidth: 'min(100%, 720px)',
+  });
+
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center', padding: '8px 12px 0', flexShrink: 0,
+    }}>
+      <div style={pill('rgba(183,168,232,0.2)', 'rgba(183,168,232,0.6)', '#4B3C93')}>
+        <span>
+          {fold.kind === 'call' ? 'Nested call folded' : `${fold.count} similar iterations folded`}
+          {' · '}showing the state after {fold.kind === 'call' ? 'it' : 'them'}. Nothing was skipped.
+        </span>
+        <button
+          onClick={() => beats.goToFrame(fold.start)}
+          style={{
+            padding: '3px 10px', borderRadius: 6, border: '1px solid #6D5BB5', background: 'transparent',
+            color: '#4B3C93', fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
+          }}
+        >
+          Expand
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // ============================================================
 // BUGS PANEL (Moved to left panel below Code Editor)
 // ============================================================
 function BugsPanel() {
-  const { state, update } = useApp();
+  const { state, beats } = useApp();
   const bugs = state.detectedBugs;
 
   if (!bugs.length) return null;
@@ -31,7 +71,7 @@ function BugsPanel() {
         {bugs.map((b, i) => (
           <button
             key={i}
-            onClick={() => update({ currentFrame: b.frameId })}
+            onClick={() => beats.goToFrame(b.frameId)}
             style={{
               textAlign: 'left', width: '100%',
               padding: '7px 10px',
@@ -147,270 +187,160 @@ function ProblemCard() {
 }
 
 // ============================================================
-// LEFT PANEL (Editor, Testcases, Diff Debug)
+// DOCK PANEL — a real column beside the stage (not an overlay): resizable, collapses to a slim rail
 // ============================================================
-function LeftPanel({ isOpen, onToggle, activeLine }) {
-  const [activeTab, setActiveTab] = React.useState('code');
-  const { state, update } = useApp();
-  const codeChanged = state.code !== state.lastExecutedCode && state.lastExecutedCode !== '';
-  
-  const [width, setWidth] = React.useState(400);
+function DockPanel({ side, isOpen, onToggle, label, defaultWidth, min, max, children }) {
+  const [width, setWidth] = useState(defaultWidth);
+  const left = side === 'left';
 
   const startDrag = (e) => {
     e.preventDefault();
     const startX = e.clientX;
     const startW = width;
-
     const onMove = (ev) => {
-      const delta = ev.clientX - startX;
-      const newW = Math.max(280, Math.min(800, startW + delta));
-      setWidth(newW);
+      const delta = left ? ev.clientX - startX : startX - ev.clientX;
+      setWidth(Math.max(min, Math.min(max, startW + delta)));
     };
-
     const onUp = () => {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
-      document.body.style.cursor = 'default';
-      document.body.style.userSelect = 'auto';
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
     };
-
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
   };
 
-  return (
-    <div style={{
-      position: 'absolute', top: 0, bottom: 0, left: 0,
-      width: width, zIndex: 30, display: 'flex', flexDirection: 'column',
-      transform: isOpen ? 'translateX(0)' : `translateX(-${width}px)`,
-      transition: 'transform 400ms cubic-bezier(0.16, 1, 0.3, 1)',
-    }}>
-      <div style={{
-        flex: 1, display: 'flex', flexDirection: 'column',
-        background: 'var(--glass-bg)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
-        borderRight: '1px solid var(--border)',
-        boxShadow: '4px 0 24px rgba(0,0,0,0.08)',
-        overflow: 'hidden'
-      }}>
-        {/* TABS HEADER */}
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
-          {['code', 'testcases', 'diff'].map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              style={{
-                flex: 1, padding: '12px 0', border: 'none', background: 'transparent',
-                fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                textTransform: 'capitalize',
-                color: activeTab === tab ? 'var(--text-primary)' : 'var(--text-muted)',
-                borderBottom: activeTab === tab ? '2px solid var(--accent-sage)' : '2px solid transparent'
-              }}
-            >
-              {tab === 'diff' ? 'Diff Debug' : tab === 'code' ? 'Code' : tab}
-            </button>
-          ))}
-        </div>
-
-        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-          {activeTab === 'code' && (
-            <>
-              {/* Code changed banner */}
-              {codeChanged && (
-                <div style={{
-                  margin: 16, padding: '12px 16px',
-                  background: 'rgba(231,195,106,0.12)',
-                  border: '1px solid rgba(231,195,106,0.35)',
-                  borderRadius: 10,
-                  display: 'flex', alignItems: 'center', gap: 10,
-                }}>
-                  <span style={{ fontSize: 16 }}>⚠️</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: '#8C6A14', marginBottom: 4 }}>Code has changed</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>The editor code differs from the last execution.</div>
-                  </div>
-                  <button
-                    onClick={() => update({ view: 'editor' })}
-                    style={{
-                      padding: '6px 12px', background: '#B08A30', color: '#fff',
-                      border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    Re-run
-                  </button>
-                </div>
-              )}
-
-              {/* Current line indicator */}
-              {activeLine >= 0 && (
-                <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{
-                    padding: '4px 10px', background: 'rgba(143,175,157,0.12)',
-                    border: '1px solid rgba(143,175,157,0.3)', borderRadius: 20,
-                    fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--accent-sage)', fontWeight: 600,
-                  }}>
-                    Line {activeLine + 1}
-                  </div>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>currently executing</span>
-                </div>
-              )}
-
-              {/* Back to Editor button */}
-              <div style={{ padding: '0 16px 16px' }}>
-                <button
-                  onClick={() => update({ view: 'editor' })}
-                  style={{
-                    width: '100%', padding: '10px',
-                    background: 'var(--bg-canvas)', color: 'var(--text-primary)',
-                    border: '1px solid var(--border)', borderRadius: 8,
-                    fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                    transition: 'background var(--motion-standard)',
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'var(--border)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-canvas)'}
-                >
-                  ← Open Editor
-                </button>
-              </div>
-
-              <div style={{ height: 1, background: 'var(--border)', margin: '0 16px 16px' }} />
-              <BugsPanel />
-              <ProblemCard />
-            </>
-          )}
-          {activeTab === 'testcases' && <TestcaseLab />}
-          {activeTab === 'diff' && <DiffDebugger />}
-        </div>
-
-        {/* Button to open AI Assistant */}
-        {activeTab === 'code' && !state.isAiAssistantOpen && (
-          <div style={{ padding: '16px', borderTop: '1px solid var(--border)' }}>
-            <button
-              onClick={() => update({ isAiAssistantOpen: true })}
-              style={{
-                width: '100%', padding: '10px',
-                background: 'var(--accent-sage)', color: '#fff',
-                border: 'none', borderRadius: 8,
-                fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                transition: 'background var(--motion-standard)'
-              }}
-            >
-              <Bot size={16} /> Open AI Debug Assistant
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Toggle button */}
+  if (!isOpen) {
+    return (
       <button
         onClick={onToggle}
+        aria-label={`Open ${label}`}
         style={{
-          position: 'absolute', top: '50%', left: '100%',
-          transform: 'translateY(-50%)',
-          width: 26, height: 90,
-          background: 'var(--bg-card)', border: '1px solid var(--border)', borderLeft: 'none',
-          borderRadius: '0 var(--radius-md) var(--radius-md) 0',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'var(--text-muted)', cursor: 'pointer', zIndex: 2,
-          transition: 'color 150ms ease, background 150ms ease',
+          width: 30, flexShrink: 0, border: 'none', cursor: 'pointer', background: 'var(--bg-card)',
+          borderRight: left ? '1px solid var(--border)' : 'none', borderLeft: left ? 'none' : '1px solid var(--border)',
+          color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}
-        onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.background = 'var(--bg-canvas)'; }}
-        onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'var(--bg-card)'; }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-canvas)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-card)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
       >
-        <span style={{ writingMode: 'vertical-rl', textOrientation: 'mixed', fontSize: 11, fontWeight: 600, letterSpacing: '0.1em' }}>
-          CODE
+        <span style={{ writingMode: 'vertical-rl', transform: left ? 'none' : 'rotate(180deg)', fontSize: 11, fontWeight: 700, letterSpacing: '0.12em' }}>
+          {label}
         </span>
       </button>
+    );
+  }
 
-      {/* Resize Handle */}
-      {isOpen && (
-        <div
-          onMouseDown={startDrag}
-          style={{
-            position: 'absolute', top: 0, bottom: 0, right: -4,
-            width: 8, cursor: 'col-resize', zIndex: 40,
-          }}
-        />
-      )}
-    </div>
+  return (
+    <aside
+      aria-label={label}
+      style={{
+        width, flexShrink: 0, position: 'relative', display: 'flex', flexDirection: 'column', minHeight: 0,
+        background: 'var(--bg-card)', borderRight: left ? '1px solid var(--border)' : 'none', borderLeft: left ? 'none' : '1px solid var(--border)',
+      }}
+    >
+      {children}
+      <button
+        onClick={onToggle}
+        aria-label={`Collapse ${label}`}
+        title={`Collapse ${label}`}
+        style={{
+          position: 'absolute', top: 8, [left ? 'right' : 'left']: 6, width: 22, height: 22, borderRadius: 6, border: 'none',
+          background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', zIndex: 3, fontSize: 14, lineHeight: 1,
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-canvas)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+      >
+        {left ? '‹' : '›'}
+      </button>
+      <div
+        onMouseDown={startDrag}
+        role="separator"
+        aria-orientation="vertical"
+        style={{ position: 'absolute', top: 0, bottom: 0, [left ? 'right' : 'left']: -3, width: 6, cursor: 'col-resize', zIndex: 10 }}
+      />
+    </aside>
   );
 }
 
 // ============================================================
-// RESIZABLE RIGHT PANEL (Inspector)
+// LEFT PANEL (Code with the running line, Testcases, Diff Debug)
 // ============================================================
-function ResizableRightPanel({ isOpen, onToggle }) {
-  const [width, setWidth] = useState(320);
-
-  const startDrag = (e) => {
-    e.preventDefault();
-    const startX = e.clientX;
-    const startW = width;
-
-    const onMove = (ev) => {
-      const delta = startX - ev.clientX;
-      const newW = Math.max(220, Math.min(600, startW + delta)); // Max 600px
-      setWidth(newW);
-    };
-    const onUp = () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  };
+function LeftPanel({ activeLine }) {
+  const [activeTab, setActiveTab] = React.useState('code');
+  const { state, update } = useApp();
+  const codeChanged = state.code !== state.lastExecutedCode && state.lastExecutedCode !== '';
+  const executed = state.lastExecutedCode || state.code;
+  const bugLines = React.useMemo(() => state.detectedBugs.map((b) => state.executionTrace[b.frameId]?.line).filter(Boolean), [state.detectedBugs, state.executionTrace]);
 
   return (
-    <div style={{
-      position: 'absolute', top: 0, bottom: 0, right: 0,
-      width, zIndex: 30, display: 'flex', flexDirection: 'column',
-      transform: isOpen ? 'translateX(0)' : `translateX(${width}px)`,
-      transition: 'transform 400ms cubic-bezier(0.16, 1, 0.3, 1)',
-    }}>
-      <div style={{
-        flex: 1, background: 'var(--glass-bg)',
-        backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
-        borderLeft: '1px solid var(--border)',
-        boxShadow: '-4px 0 24px rgba(0,0,0,0.08)',
-        display: 'flex', flexDirection: 'column'
-      }}>
-        <InspectorPanel />
+    <>
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', paddingRight: 28, flexShrink: 0 }}>
+        {['code', 'testcases', 'diff'].map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            style={{
+              flex: 1, padding: '11px 0', border: 'none', background: 'transparent', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              textTransform: 'capitalize', color: activeTab === tab ? 'var(--text-primary)' : 'var(--text-muted)',
+              borderBottom: activeTab === tab ? '2px solid var(--accent-sage)' : '2px solid transparent',
+            }}
+          >
+            {tab === 'diff' ? 'Diff Debug' : tab === 'code' ? 'Code' : tab}
+          </button>
+        ))}
       </div>
 
-      {/* Resize Handle */}
-      {isOpen && (
-        <div
-          onMouseDown={startDrag}
-          style={{
-            position: 'absolute', left: 0, top: 0, bottom: 0, width: 6,
-            cursor: 'col-resize', zIndex: 10,
-          }}
-        />
+      {activeTab === 'code' && (
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          {codeChanged && (
+            <div style={{ margin: '10px 12px 0', padding: '8px 12px', background: 'rgba(231,195,106,0.12)', border: '1px solid rgba(231,195,106,0.35)', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ flex: 1, fontSize: 11, color: 'var(--text-secondary)' }}>
+                <b style={{ color: '#8C6A14' }}>The editor changed</b> since this run. You are looking at the code that ran.
+              </div>
+              <button onClick={() => update({ view: 'editor' })} style={{ padding: '5px 10px', background: '#B08A30', color: '#fff', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                Re-run
+              </button>
+            </div>
+          )}
+          <div style={{ padding: '10px 12px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+            {activeLine >= 0 && (
+              <span style={{ padding: '3px 10px', background: 'rgba(231,195,106,0.16)', border: '1px solid rgba(231,195,106,0.4)', borderRadius: 20, fontSize: 11.5, fontFamily: 'var(--font-mono)', color: '#8C6A14', fontWeight: 700 }}>
+                line {activeLine + 1}
+              </span>
+            )}
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1 }}>{activeLine >= 0 ? 'about to run' : 'not started'}</span>
+            <button
+              onClick={() => update({ view: 'editor' })}
+              style={{ padding: '4px 10px', background: 'var(--bg-canvas)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+            >
+              ← Editor
+            </button>
+          </div>
+          <div style={{ flex: 1, minHeight: 160, padding: 12 }}>
+            <CodeEditor mode="readonly" code={executed} activeLineIndex={activeLine} bugLines={bugLines} />
+          </div>
+          <div style={{ maxHeight: '38%', overflowY: 'auto', flexShrink: 0, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+            <BugsPanel />
+            <ProblemCard />
+          </div>
+          {!state.isAiAssistantOpen && (
+            <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+              <button
+                onClick={() => update({ isAiAssistantOpen: true })}
+                style={{ width: '100%', padding: '9px', background: 'var(--accent-sage)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              >
+                <Bot size={15} /> Ask for a hint
+              </button>
+            </div>
+          )}
+        </div>
       )}
-
-      <button
-        onClick={onToggle}
-        style={{
-          position: 'absolute', top: '50%', right: '100%',
-          transform: 'translateY(-50%)',
-          width: 26, height: 90,
-          background: 'var(--bg-card)', border: '1px solid var(--border)', borderRight: 'none',
-          borderRadius: 'var(--radius-md) 0 0 var(--radius-md)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'var(--text-muted)', cursor: 'pointer', zIndex: 2,
-          transition: 'color 150ms ease, background 150ms ease',
-        }}
-        onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.background = 'var(--bg-canvas)'; }}
-        onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'var(--bg-card)'; }}
-      >
-        <span style={{ writingMode: 'vertical-rl', textOrientation: 'mixed', fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', transform: 'rotate(180deg)' }}>
-          INSPECT
-        </span>
-      </button>
-    </div>
+      {activeTab === 'testcases' && <div style={{ flex: 1, overflowY: 'auto' }}><TestcaseLab /></div>}
+      {activeTab === 'diff' && <div style={{ flex: 1, overflowY: 'auto' }}><DiffDebugger /></div>}
+    </>
   );
 }
 
@@ -489,9 +419,10 @@ function ResizableBottomPanel({ isOpen, onToggle, children }) {
 // PLAY ENGINE
 // ============================================================
 function usePlayEngine() {
-  const { state, update } = useApp();
-  const { isPlaying, playbackSpeed, currentFrame, executionTrace } = state;
+  const { state, beats } = useApp();
+  const { isPlaying, playbackSpeed, executionTrace } = state;
   const total = executionTrace.length;
+  const { advance } = beats;
   const rafRef = useRef(null);
   const lastTickRef = useRef(null);
 
@@ -509,13 +440,7 @@ function usePlayEngine() {
 
       if (elapsed >= msPerFrame) {
         lastTickRef.current = now;
-        update((prev) => {
-          const next = prev.currentFrame + 1;
-          if (next >= prev.executionTrace.length) {
-            return { isPlaying: false }; // stop at end
-          }
-          return { currentFrame: next };
-        });
+        advance(); // next beat (a folded run counts as one); stops by itself at the end
       }
 
       rafRef.current = requestAnimationFrame(tick);
@@ -526,16 +451,17 @@ function usePlayEngine() {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       lastTickRef.current = null;
     };
-  }, [isPlaying, playbackSpeed, total, update]);
+  }, [isPlaying, playbackSpeed, total, advance]);
 }
 
 // ============================================================
 // KEYBOARD SHORTCUTS
 // ============================================================
 function useKeyboardShortcuts() {
-  const { state, update } = useApp();
-  const { isPlaying, currentFrame, executionTrace } = state;
+  const { state, update, beats } = useApp();
+  const { isPlaying, executionTrace } = state;
   const total = executionTrace.length;
+  const { stepBy } = beats;
 
   useEffect(() => {
     if (state.view !== 'visualizer') return;
@@ -556,16 +482,16 @@ function useKeyboardShortcuts() {
           update({ isPlaying: !isPlaying });
           break;
         case 'ArrowLeft':
-          update({ currentFrame: Math.max(0, currentFrame - 1), isPlaying: false });
+          stepBy(-1);
           break;
         case 'ArrowRight':
-          update({ currentFrame: Math.min(total - 1, currentFrame + 1), isPlaying: false });
+          stepBy(1);
           break;
         case 'Home':
-          update({ currentFrame: 0, isPlaying: false });
+          stepBy(-Infinity);
           break;
         case 'End':
-          update({ currentFrame: total - 1, isPlaying: false });
+          stepBy(Infinity);
           break;
         case '1': update({ playbackSpeed: 0.25 }); break;
         case '2': update({ playbackSpeed: 0.5 }); break;
@@ -583,7 +509,7 @@ function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [state.view, currentFrame, isPlaying, total, update]);
+  }, [state.view, isPlaying, total, update, stepBy]);
 }
 
 // ============================================================
@@ -625,22 +551,23 @@ export default function VisualizerView() {
   const activeLine  = frame ? frame.line - 1 : -1;
 
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column',
-      height: '100%', background: 'var(--bg-page)',
-    }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg-page)' }}>
       <TopBar />
 
-      <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
+      <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', overflow: 'hidden' }}>
+        {/* Left dock: the code that ran, with the running line */}
+        <DockPanel side="left" label="CODE" isOpen={state.leftPanelOpen} onToggle={() => update({ leftPanelOpen: !state.leftPanelOpen })} defaultWidth={390} min={280} max={760}>
+          <LeftPanel activeLine={activeLine} />
+        </DockPanel>
 
-        {/* Canvas background + ExecutionCanvas */}
+        {/* The stage */}
         <div style={{
-          position: 'absolute', inset: 0,
-          background: 'var(--canvas-bg)',
-          backgroundImage: 'radial-gradient(circle, var(--canvas-dot) 1px, transparent 1px)',
-          backgroundSize: '24px 24px',
-          display: 'flex'
+          flex: 1, minWidth: 0, position: 'relative', overflow: 'hidden', background: 'var(--canvas-bg)',
+          backgroundImage: 'radial-gradient(circle, var(--canvas-dot) 1px, transparent 1px)', backgroundSize: '24px 24px',
+          display: 'flex', flexDirection: 'column',
         }}>
+          <TraceBanners />
+          <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex' }}>
           {state.diffMode && state.traceA && state.traceB ? (
             <div style={{ display: 'flex', width: '100%', height: '100%' }}>
               <div style={{ flex: 1, borderRight: '2px solid var(--border)', position: 'relative', overflow: 'hidden' }}>
@@ -655,27 +582,16 @@ export default function VisualizerView() {
           ) : (
             <ExecutionCanvas />
           )}
+          </div>
         </div>
 
-        {/* Left Panel: Code Editor + Bugs */}
-        <LeftPanel
-          isOpen={state.leftPanelOpen}
-          onToggle={() => update({ leftPanelOpen: !state.leftPanelOpen })}
-          activeLine={activeLine}
-        />
+        {/* Right dock: variables, call stack, memory, outline */}
+        <DockPanel side="right" label="INSPECT" isOpen={state.rightPanelOpen} onToggle={() => update({ rightPanelOpen: !state.rightPanelOpen })} defaultWidth={320} min={240} max={620}>
+          <InspectorPanel />
+        </DockPanel>
 
-        {/* Right Panel: Tabbed Inspector */}
-        <ResizableRightPanel
-          isOpen={state.rightPanelOpen}
-          onToggle={() => update({ rightPanelOpen: !state.rightPanelOpen })}
-        />
-
-        {/* Floating AI Debug Assistant */}
-        <AIDebugAssistant 
-          isOpen={state.isAiAssistantOpen} 
-          onClose={() => update({ isAiAssistantOpen: false })} 
-        />
-
+        {/* Floating hint assistant */}
+        <AIDebugAssistant isOpen={state.isAiAssistantOpen} onClose={() => update({ isAiAssistantOpen: false })} />
       </div>
 
       <ResizableBottomPanel isOpen={timelineOpen} onToggle={() => setTimelineOpen(!timelineOpen)}>

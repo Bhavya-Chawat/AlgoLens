@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
-import { Columns, Play, Trash2, ArrowRightLeft } from 'lucide-react';
+import { Columns, Trash2, ArrowRightLeft } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export default function DiffDebugger() {
   const { state, update } = useApp();
-  const { traceA, traceB, diffMode, diffFrameIndex, diffReport, executionTrace } = state;
+  const { traceA, traceB, diffMode, diffReport, executionTrace } = state;
 
   const loadTrace = (slot) => {
     if (executionTrace.length === 0) return;
@@ -57,7 +56,7 @@ export default function DiffDebugger() {
       valB = traceB.length > len ? 'continued executing' : 'terminated';
     }
 
-    let report = '';
+    let report;
     if (divergenceFrame === -1) {
       report = `Execution paths matched perfectly for all ${len} frames. No logic divergence detected.`;
     } else {
@@ -123,7 +122,7 @@ export default function DiffDebugger() {
         disabled={!traceA || !traceB}
         style={{
           padding: '12px', background: (!traceA || !traceB) ? 'var(--bg-card)' : 'var(--accent-sage)',
-          color: (!traceA || !traceB) ? 'var(--text-muted)' : '#fff', border: 'none', borderRadius: 8,
+          color: (!traceA || !traceB) ? 'var(--text-muted)' : '#fff', borderRadius: 8,
           fontSize: 13, fontWeight: 600, cursor: (!traceA || !traceB) ? 'not-allowed' : 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
           transition: 'all 0.2s ease', border: (!traceA || !traceB) ? '1px solid var(--border)' : 'none'

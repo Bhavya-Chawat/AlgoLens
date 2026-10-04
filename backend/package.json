@@ -1,22 +1,22 @@
 {
   "name": "algolens-backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Local API for AlgoLens: LeetCode import, AI hints, Java/C++ runner",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test \"test/**/*.test.js\""
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
-    "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2",
-    "groq-sdk": "^1.2.1",
-    "node-fetch": "^3.3.2"
+    "tree-sitter-wasms": "^0.1.13",
+    "web-tree-sitter": "^0.25.10"
   }
 }

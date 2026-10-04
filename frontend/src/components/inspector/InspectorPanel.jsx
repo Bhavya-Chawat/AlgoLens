@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import VariablesTab from './VariablesTab';
 import CallStackTab from './CallStackTab';
 import MemoryTab from './MemoryTab';
+import OutlineTab from './OutlineTab';
 
 export default function InspectorPanel() {
   const [activeTab, setActiveTab] = useState('Variables');
 
-  const tabs = ['Variables', 'Call Stack', 'Memory'];
+  const tabs = ['Variables', 'Call Stack', 'Memory', 'Outline'];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -38,6 +39,7 @@ export default function InspectorPanel() {
         {activeTab === 'Variables' && <VariablesTab />}
         {activeTab === 'Call Stack' && <CallStackTab />}
         {activeTab === 'Memory' && <MemoryTab />}
+        {activeTab === 'Outline' && <OutlineTab />}
       </div>
     </div>
   );

@@ -99,3 +99,11 @@ export const LANGUAGE_EXT = {
   cpp: '.cpp',
   javascript: '.js',
 };
+
+// Our language id -> LeetCode's `langSlug` (note: plain `python` on LeetCode is Python 2).
+export const LEETCODE_LANG = {
+  python: 'python3',
+  java: 'java',
+  cpp: 'cpp',
+  javascript: 'javascript',
+};

@@ -1,3 +1,9 @@
-# Tell GitHub Linguist to exclude vendored/third-party files from language stats
-backend/include/json.hpp linguist-vendored=true
-backend/lib/gson.jar linguist-vendored=true
+# GitHub language statistics: leave third-party files out
+runner/java/lib/gson.jar linguist-vendored=true
+
+# Files that are copied into Linux containers keep LF line endings, even when checked out on Windows
+runner/** text eol=lf
+*.jar binary
+
+# Windows batch files need CRLF
+*.bat text eol=crlf

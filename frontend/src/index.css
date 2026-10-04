@@ -95,6 +95,14 @@
 
   /* Glassmorphic floating panel — Light */
   --glass-bg: rgba(255, 255, 255, 0.88);
+
+  /* Syntax colours (code view) — Light */
+  --syn-keyword: #7c3aed;
+  --syn-string: #0f7b5b;
+  --syn-number: #c2570c;
+  --syn-comment: #8a96a6;
+  --syn-function: #2563eb;
+  --syn-type: #0e7490;
 }
 
 /* ---- DARK THEME ---- */
@@ -124,6 +132,14 @@
 
   /* Glassmorphic floating panel — Dark */
   --glass-bg: rgba(22, 22, 22, 0.90);
+
+  /* Syntax colours (code view) — Dark */
+  --syn-keyword: #c4a5ff;
+  --syn-string: #6ee7b7;
+  --syn-number: #fdba74;
+  --syn-comment: #6b7686;
+  --syn-function: #7fb2ff;
+  --syn-type: #67e8f9;
 }
 
 /* ---- BASE ---- */

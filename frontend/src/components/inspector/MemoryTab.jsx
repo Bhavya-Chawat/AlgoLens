@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 
 export default function MemoryTab() {

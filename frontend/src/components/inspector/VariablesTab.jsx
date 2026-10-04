@@ -1,10 +1,14 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, History, ChevronRight, ChevronDown, List as ListIcon } from 'lucide-react';
+import { Search, History, ChevronRight, ChevronDown } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 // ============================================================
 // HELPERS
 // ============================================================
+// compact text for any value (objects and arrays must never print as [object Object])
+const short = (v) => (v !== null && typeof v === 'object' ? JSON.stringify(v).slice(0, 70) : String(v));
+const isObjectValue = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+
 function getPastValues(trace, currentFrame, varName, maxCount = 5) {
   const history = [];
   let lastValStr = null;
@@ -54,41 +58,37 @@ function TypeBadge({ type }) {
 // ============================================================
 // ANIMATED NUMBER
 // ============================================================
+// a small integer change is counted up/down instead of jumping
+function isSmallStep(value, prevValue) {
+  if (prevValue === undefined || prevValue === null) return false;
+  const current = Number(value);
+  const prev = Number(prevValue);
+  if (Number.isNaN(current) || Number.isNaN(prev)) return false;
+  const delta = Math.abs(current - prev);
+  return delta > 0 && delta <= 20 && Number.isInteger(current) && Number.isInteger(prev);
+}
+
 function AnimatedNumber({ value, prevValue }) {
-  const [displayVal, setDisplayVal] = useState(value);
+  // the count in progress ({ from, to, shown }); state is only set from the timer, the rest is derived in render
+  const [run, setRun] = useState(null);
+  const animate = isSmallStep(value, prevValue);
 
   useEffect(() => {
-    if (prevValue === undefined || prevValue === null) {
-      setDisplayVal(value);
-      return;
-    }
-
+    if (!animate) return undefined;
     const current = Number(value);
     const prev = Number(prevValue);
+    const step = prev < current ? 1 : -1;
+    let shown = prev;
+    const interval = setInterval(() => {
+      shown += step;
+      setRun({ from: prevValue, to: value, shown });
+      if (shown === current) clearInterval(interval);
+    }, Math.max(16, 200 / Math.abs(current - prev)));
+    return () => clearInterval(interval);
+  }, [animate, value, prevValue]);
 
-    if (isNaN(current) || isNaN(prev)) {
-      setDisplayVal(value);
-      return;
-    }
-
-    const delta = Math.abs(current - prev);
-    // Count up/down if delta is small
-    if (delta > 0 && delta <= 20 && Number.isInteger(current) && Number.isInteger(prev)) {
-      let step = prev < current ? 1 : -1;
-      let curr = prev;
-      
-      const interval = setInterval(() => {
-        curr += step;
-        setDisplayVal(curr);
-        if (curr === current) clearInterval(interval);
-      }, Math.max(16, 200 / delta));
-
-      return () => clearInterval(interval);
-    } else {
-      setDisplayVal(value);
-    }
-  }, [value, prevValue]);
-
+  const mine = run && run.to === value && run.from === prevValue;
+  const displayVal = mine ? run.shown : animate ? prevValue : value;
   return <span className="transition-value-fade">{displayVal}</span>;
 }
 
@@ -142,10 +142,12 @@ const VariableRow = React.memo(function VariableRow({ name, info, currentFrame, 
         </button>
       );
     }
-    if (info.type === 'dict' || info.type === 'TreeNode' || info.type === 'ListNode') {
-      const keys = info.value ? Object.keys(info.value) : [];
+    if (info.type === 'dict' || info.type === 'TreeNode' || info.type === 'ListNode' || isObjectValue(info.value)) {
+      const keys = info.value ? Object.keys(info.value).filter((k) => !k.startsWith('__')) : [];
       let label = `{${keys.length} keys}`;
-      if (info.type === 'TreeNode' || info.type === 'ListNode') {
+      if (info.value?.__class__ && info.value.val !== undefined) label = `${info.value.__class__}(${short(info.value.val)})`;
+      else if (info.value?.__class__) label = `${info.value.__class__} {${keys.length}}`;
+      else if (info.type === 'TreeNode' || info.type === 'ListNode') {
         const valStr = info.value && info.value.val !== undefined ? info.value.val : '?';
         label = `${info.type}(${valStr})`;
       }
@@ -165,7 +167,7 @@ const VariableRow = React.memo(function VariableRow({ name, info, currentFrame, 
     }
     
     // Default fallback
-    const s = String(info.value);
+    const s = short(info.value);
     return <span>{s.length > 40 ? s.slice(0, 38) + '...' : s}</span>;
   };
 
@@ -189,15 +191,15 @@ const VariableRow = React.memo(function VariableRow({ name, info, currentFrame, 
                 border: '1px solid var(--border)', borderRadius: 4,
                 fontSize: 12, fontFamily: 'var(--font-mono)'
               }}>
-                {String(val)}
+                {short(val)}
               </div>
             </div>
           ))}
         </div>
       );
     }
-    if (info.type === 'dict' || info.type === 'TreeNode' || info.type === 'ListNode') {
-      const entries = info.value ? Object.entries(info.value) : [];
+    if (info.type === 'dict' || info.type === 'TreeNode' || info.type === 'ListNode' || isObjectValue(info.value)) {
+      const entries = info.value ? Object.entries(info.value).filter(([k]) => !k.startsWith('__')) : [];
       return (
         <div style={{
           padding: '8px', background: 'var(--bg-canvas)',
@@ -207,7 +209,7 @@ const VariableRow = React.memo(function VariableRow({ name, info, currentFrame, 
           {entries.map(([k, v], i) => (
             <div key={i} style={{ display: 'flex', fontSize: 12, fontFamily: 'var(--font-mono)' }}>
               <span style={{ color: 'var(--text-muted)', width: 60 }}>{k}:</span>
-              <span>{String(v)}</span>
+              <span>{short(v)}</span>
             </div>
           ))}
         </div>
@@ -229,7 +231,7 @@ const VariableRow = React.memo(function VariableRow({ name, info, currentFrame, 
         <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Recent Values</div>
         {history.map((h, i) => (
           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontFamily: 'var(--font-mono)' }}>
-            <span style={{ color: 'var(--text-secondary)' }}>{String(h.value).slice(0, 30)}</span>
+            <span style={{ color: 'var(--text-secondary)' }}>{short(h.value).slice(0, 30)}</span>
             <span style={{ color: 'var(--text-muted)' }}>frame {h.frame}</span>
           </div>
         ))}

@@ -1,11 +1,41 @@
-import React, { useState, useMemo } from 'react';
-import { Play, Plus, Trash2, CheckCircle2, XCircle, AlertCircle, Wand2, RefreshCw } from 'lucide-react';
+import { useState, useMemo, useRef } from 'react';
+import { Plus, Trash2, Wand2, RefreshCw } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { argsFromInputs, entryLabel } from '../engine/buildJob';
+import { EDGE_THEMES, edgeCase } from '../engine/edgeCases';
+
+/** The parameters a run would be called with: LeetCode's signature, else the chosen function, else whatever is typed in. */
+function parametersOf(state) {
+  const signature = state.editorMode === 'leetcode' ? state.leetcodeProblem?.signature?.params : null;
+  if (signature?.length) return signature;
+  if (state.entryChoice !== 'script') {
+    const candidates = state.entryCandidates || [];
+    const chosen = state.entryChoice === 'auto' ? candidates[0] : candidates.find((c) => entryLabel(c) === state.entryChoice);
+    if (chosen?.params?.length) return chosen.params;
+  }
+  return Object.keys(argsFromInputs(state.customInputs)).map((name) => ({ name, type: null }));
+}
 
 export default function TestcaseLab() {
   const { state, update, traceEngine } = useApp();
   const [customCases, setCustomCases] = useState([]);
   const [runningId, setRunningId] = useState(null);
+
+  const params = useMemo(() => parametersOf(state), [state]);
+  const sample = useMemo(() => argsFromInputs(state.customInputs), [state.customInputs]);
+  const skipped = useMemo(() => edgeCase('single', params, { sample }).unknown, [params, sample]);
+
+  const seeds = useRef(0); // each click gets a new seed, so "Random" differs every time yet a session is reproducible
+  const addEdgeCases = (themeIds) => {
+    const seed = (seeds.current += 1);
+    setCustomCases((prev) => [
+      ...prev,
+      ...themeIds.map((id, i) => {
+        const made = edgeCase(id, params, { sample, seed });
+        return { id: `${made.id}-${prev.length + i}`, source: 'user', data: made.data, label: `Edge: ${made.label}`, editable: false };
+      }),
+    ]);
+  };
 
   // Build the list of test cases from LeetCode or custom inputs
   const sampleCases = useMemo(() => {
@@ -75,27 +105,25 @@ export default function TestcaseLab() {
     update({ globalLoading: true, globalLoadingText: 'Re-running with selected test case…' });
 
     try {
-      const testInput = JSON.stringify([testCase.data]);
-      const code = state.code || '';
-      const result = await traceEngine.executeCode(state.editorMode, state.language, code, testInput, state.customApiKey, state.judge0ApiKey);
+      const inputs = Object.entries(testCase.data).map(([key, value]) => ({ key, val: JSON.stringify(value) }));
+      const built = await traceEngine.run({ ...state, customInputs: inputs });
 
-      if (result.error && (!result.frames || result.frames.length === 0)) {
-        alert('Error: ' + result.error);
+      if (built.frames.length === 0) {
+        alert('Error: ' + (built.error ? `${built.error.type}: ${built.error.message}` : 'nothing was executed'));
         update({ globalLoading: false });
-        setRunningId(null);
         return;
       }
 
       update({
         globalLoading: false,
-        executionTrace: result.frames || [],
+        executionTrace: built.frames,
         currentFrame: 0,
-        detectedBugs: result.bugs || [],
-        lastExecutedCode: code,
-        customInputs: Object.entries(testCase.data).map(([k, v]) => ({
-          key: k,
-          val: typeof v === 'object' ? JSON.stringify(v) : String(v),
-        })),
+        detectedBugs: built.bugs,
+        lastExecutedCode: state.code || '',
+        executionResult: built.result,
+        traceStdout: built.stdout,
+        traceMeta: built.meta,
+        customInputs: inputs,
       });
     } catch (err) {
       alert('Execution failed: ' + err.message);
@@ -234,34 +262,49 @@ export default function TestcaseLab() {
         </div>
       )}
 
-      {/* Quick generators */}
+      {/* Edge cases: built from the function's own parameters (see engine/edgeCases.js) */}
       <div style={{ padding: 12, background: 'var(--bg-canvas)', border: '1px solid var(--border)', borderRadius: 8 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Wand2 size={14} style={{ color: 'var(--accent-sage)' }} /> Quick Generate
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Wand2 size={14} style={{ color: 'var(--accent-sage)' }} /> Edge cases
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, lineHeight: 1.5 }}>
+          {params.length > 0
+            ? <>Made for <code style={{ fontFamily: 'var(--font-mono)' }}>({params.map((p) => p.name).join(', ')})</code> from their types, or from the values you typed in. No AI, nothing is sent anywhere.</>
+            : 'Write a function, or type some inputs: edge cases follow the function’s parameters.'}
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {['Random', 'Edge', 'Worst'].map(type => (
-            <button key={type} onClick={() => {
-              const arr = type === 'Edge' ? [] : type === 'Worst' ? [10,9,8,7,6,5,4,3,2,1] : Array.from({length: 8}, () => Math.floor(Math.random() * 50));
-              setCustomCases(prev => [...prev, {
-                id: `gen-${Date.now()}`,
-                source: 'user',
-                data: { nums: arr },
-                label: `${type} Case`,
-                editable: false,
-              }]);
-            }} style={{
-              padding: '6px 12px', background: 'var(--bg-card)', border: '1px solid var(--border)',
-              borderRadius: 6, fontSize: 11, color: 'var(--text-secondary)', cursor: 'pointer',
-              transition: 'background 150ms ease',
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--border)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-card)'}
+          {EDGE_THEMES.map((theme) => (
+            <button
+              key={theme.id}
+              disabled={params.length === 0}
+              title={theme.hint}
+              onClick={() => addEdgeCases([theme.id])}
+              style={{
+                padding: '6px 12px', background: 'var(--bg-card)', border: '1px solid var(--border)',
+                borderRadius: 6, fontSize: 11, color: 'var(--text-secondary)',
+                cursor: params.length === 0 ? 'not-allowed' : 'pointer', opacity: params.length === 0 ? 0.5 : 1,
+              }}
             >
-              {type} Case
+              {theme.label}
             </button>
           ))}
+          <button
+            disabled={params.length === 0}
+            onClick={() => addEdgeCases(EDGE_THEMES.map((t) => t.id))}
+            style={{
+              padding: '6px 12px', background: 'transparent', border: '1px solid var(--accent-sage)', borderRadius: 6,
+              fontSize: 11, fontWeight: 600, color: 'var(--accent-sage)',
+              cursor: params.length === 0 ? 'not-allowed' : 'pointer', opacity: params.length === 0 ? 0.5 : 1,
+            }}
+          >
+            Add all
+          </button>
         </div>
+        {skipped.length > 0 && (
+          <div style={{ fontSize: 11, color: '#B08A30', marginTop: 8, lineHeight: 1.5 }}>
+            The type of <b>{skipped.join(', ')}</b> is unknown, so it is left out of generated cases. Type an example value for it in Function Arguments and its shape is used.
+          </div>
+        )}
       </div>
     </div>
   );

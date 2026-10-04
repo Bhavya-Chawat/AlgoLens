@@ -1,26 +1,13 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Bot, ChevronDown, ChevronUp, AlertCircle, Settings, ExternalLink, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Bot, AlertCircle, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { summarizeTrace, buildPrompt } from '../engine/traceAnalyzer';
-
-// System prompt adapted from Phase 6 spec
-const SYSTEM_PROMPT = `You are AlgoLens AI, a mentoring assistant for competitive programming. You analyze execution traces and provide gentle, Socratic hints to help the user find their own bugs.
-
-Your analysis must always:
-1. NEVER directly answer the given question or give the full solution.
-2. Provide a SLIGHT HINT that points the user in the right direction.
-3. State what the code is doing incorrectly without giving away the exact fix.
-4. Keep the tone encouraging and mentoring.
-5. On the very first line, output exactly [ALGO: <Algorithm Name>] where <Algorithm Name> is the algorithm paradigm being used (e.g., BFS, Sliding Window, Dynamic Programming, Two Pointers).
-
-Be specific but do not write the corrected code. Reference variable names and frame numbers to point out where the logic starts deviating.
-
-Respond in clean plain text. No markdown. No bullet points. Use short paragraphs.
-Maximum 2 paragraphs.`;
+import { summarizeTrace, buildPrompt, estimateTokens, HINT_SYSTEM_PROMPT } from '../engine/traceAnalyzer';
+import { apiFetch } from '../api/client';
+import { argsFromInputs } from '../engine/buildJob';
 
 export default function AIDebugAssistant({ isOpen, onClose }) {
-  const { state, update } = useApp();
-  const { executionTrace, testcase, detectedBugs } = state;
+  const { state, update, beats } = useApp();
+  const { executionTrace, detectedBugs } = state;
 
   const [history, setHistory] = useState([]);
   const [activeTabId, setActiveTabId] = useState(null);
@@ -63,8 +50,6 @@ export default function AIDebugAssistant({ isOpen, onClose }) {
     const startY = e.clientY;
     const startW = size.w;
     const startH = size.h;
-    const startPosX = pos.x;
-    const startPosY = pos.y;
 
     const onMove = (ev) => {
       if (direction === 'se') {
@@ -82,7 +67,7 @@ export default function AIDebugAssistant({ isOpen, onClose }) {
   const runAnalysis = async () => {
     const newId = Date.now();
     const newAnalysis = { id: newId, text: '', status: 'loading', errorMsg: '' };
-    
+
     setHistory(prev => {
       const updated = [newAnalysis, ...prev].slice(0, 3);
       return updated;
@@ -90,54 +75,58 @@ export default function AIDebugAssistant({ isOpen, onClose }) {
     setActiveTabId(newId);
 
     try {
-      const summary = summarizeTrace(executionTrace, state.lastExecutedCode, testcase, detectedBugs, state.leetcodeProblem);
+      const testInput = JSON.stringify(argsFromInputs(state.customInputs));
+      const summary = summarizeTrace(executionTrace, state.lastExecutedCode, testInput, detectedBugs, state.leetcodeProblem, {
+        language: state.language,
+        result: state.executionResult,
+      });
       const userPrompt = buildPrompt(summary);
 
-      const response = await fetch('http://localhost:3000/api/hint', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          apiKey: state.customApiKey,
-          messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user', content: userPrompt }
-          ]
-        })
-      });
-
-      if (!response.ok) {
-        const errJson = await response.json().catch(() => ({}));
-        throw new Error(errJson.error?.message || `HTTP ${response.status}`);
+      // Asking again about the very same run costs nothing: show the hint that is already there.
+      const known = history.find((h) => h.key === userPrompt && h.status === 'done');
+      if (known) {
+        setHistory((prev) => prev.filter((h) => h.id !== newId));
+        setActiveTabId(known.id);
+        return;
       }
+      const tokens = estimateTokens(HINT_SYSTEM_PROMPT) + estimateTokens(userPrompt);
+      setHistory((prev) => prev.map((h) => (h.id === newId ? { ...h, key: userPrompt, tokens } : h)));
+
+      // The key travels in a header (api/client.js); failures arrive as readable ApiErrors.
+      const response = await apiFetch('/hint', {
+        body: {
+          messages: [
+            { role: 'system', content: HINT_SYSTEM_PROMPT },
+            { role: 'user', content: userPrompt },
+          ],
+        },
+      });
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
       let done = false;
+      let buffer = '';
       let streamedText = '';
+
+      const handleLine = (line) => {
+        if (!line.startsWith('data: ') || line === 'data: [DONE]') return;
+        try {
+          const data = JSON.parse(line.slice(6));
+          streamedText += data.choices[0]?.delta?.content || '';
+          setHistory((prev) => prev.map((h) => (h.id === newId ? { ...h, text: streamedText } : h)));
+        } catch { /* not a JSON event: skipped */ }
+      };
 
       while (!done) {
         const { value, done: readerDone } = await reader.read();
         done = readerDone;
-        if (value) {
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split('\n');
-          for (const line of lines) {
-            if (line.startsWith('data: ') && line !== 'data: [DONE]') {
-              try {
-                const data = JSON.parse(line.slice(6));
-                const delta = data.choices[0]?.delta?.content || '';
-                streamedText += delta;
-                
-                setHistory(prev => prev.map(h => 
-                  h.id === newId ? { ...h, text: streamedText } : h
-                ));
-              } catch (e) {}
-            }
-          }
-        }
+        if (value) buffer += decoder.decode(value, { stream: true });
+        // a network chunk can end in the middle of a line: keep that piece for the next read
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        lines.forEach(handleLine);
       }
+      handleLine(buffer.trim());
 
       setHistory(prev => prev.map(h => 
         h.id === newId ? { ...h, status: 'done' } : h
@@ -173,7 +162,7 @@ export default function AIDebugAssistant({ isOpen, onClose }) {
               return (
                 <span
                   key={i}
-                  onClick={() => update({ currentFrame: Math.min(frameNum, executionTrace.length - 1), isPlaying: false })}
+                  onClick={() => beats.goToFrame(Math.min(frameNum, executionTrace.length - 1))}
                   style={{
                     color: 'var(--accent-sage)', textDecoration: 'underline',
                     textUnderlineOffset: 2, cursor: 'pointer', fontWeight: 600
@@ -312,6 +301,9 @@ export default function AIDebugAssistant({ isOpen, onClose }) {
                 <Bot size={48} style={{ color: 'var(--border)', opacity: 0.8 }} />
                 <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
                   Analyze your execution to get AI insights without giving away the answer.
+                  <div style={{ marginTop: 8, fontSize: 11 }}>
+                    Optional: nothing is sent until you press Get Hint, and then only your code with a short summary of the run (a few hundred tokens).
+                  </div>
                 </div>
               </div>
             )}
@@ -339,6 +331,11 @@ export default function AIDebugAssistant({ isOpen, onClose }) {
                 {activeAnalysis.status === 'done' && renderStatCards(activeAnalysis.text)}
                 {renderText(activeAnalysis.text)}
                 {activeAnalysis.status === 'loading' && <span style={{ display: 'inline-block', width: 6, height: 12, background: 'var(--accent-sage)', animation: 'blink 1s step-end infinite' }} />}
+                {activeAnalysis.tokens && (
+                  <div style={{ marginTop: 12, fontSize: 10, color: 'var(--text-muted)' }}>
+                    ≈{activeAnalysis.tokens} tokens sent · your own Groq key · asking again about the same run is free
+                  </div>
+                )}
               </div>
             )}
         </div>

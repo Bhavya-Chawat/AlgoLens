@@ -1,11 +1,12 @@
-import React, { useState, useCallback } from 'react';
-import { Play, Plus, AlertCircle, X } from 'lucide-react';
+import React, { useState, useCallback, useEffect } from 'react';
+import { Play, AlertCircle, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { apiJson } from '../api/client';
+import { entryLabel, argsFromInputs } from '../engine/buildJob';
 import CodeEditor from '../components/CodeEditor';
 import TopBar from '../components/TopBar';
 import {
-  PLACEHOLDER_TEST, PLACEHOLDER_CODE,
-  RANDOM_INPUTS, EDGE_INPUTS, WORST_INPUTS,
+  PLACEHOLDER_CODE, LEETCODE_LANG,
 } from '../constants/placeholders';
 
 // ============================================================
@@ -39,20 +40,20 @@ function CustomRulesModal({ onClose }) {
         {/* Body */}
         <div style={{ padding: '24px 20px', display: 'flex', flexDirection: 'column', gap: 20 }}>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-            AlgoLens uses an AI-powered AST Transformer to automatically instrument your code. You do NOT need to write complex boilerplate or input parsing logic.
+            AlgoLens really runs your code and records every step, so what you see is what your program actually did. You do not need boilerplate or input parsing.
           </div>
 
           <div>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>1. No Input Parsing Required</div>
             <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-              Do not use <code style={{fontFamily:'var(--font-mono)'}}>Scanner</code>, <code style={{fontFamily:'var(--font-mono)'}}>cin</code>, or <code style={{fontFamily:'var(--font-mono)'}}>sys.stdin</code>. The AI will automatically take the inputs from the "Function Arguments" panel and pass them directly into your function.
+              Do not use <code style={{fontFamily:'var(--font-mono)'}}>Scanner</code>, <code style={{fontFamily:'var(--font-mono)'}}>cin</code>, or <code style={{fontFamily:'var(--font-mono)'}}>sys.stdin</code>. The values in the "Function Arguments" panel are passed straight into your function, matched by parameter name. Lists like <code style={{fontFamily:'var(--font-mono)'}}>[3,9,20,null,null,15,7]</code> become real tree / linked-list nodes when the parameter is a TreeNode / ListNode.
             </div>
           </div>
 
           <div>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>2. Function Structure</div>
             <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-              You do not need a <code style={{fontFamily:'var(--font-mono)'}}>main</code> method. Simply write your logic inside a function or a class.
+              You do not need a <code style={{fontFamily:'var(--font-mono)'}}>main</code> method. Write your logic inside a function or a <code style={{fontFamily:'var(--font-mono)'}}>Solution</code> class. If your code is a script (it already calls things at the top level), choose "Script" in <strong>Run as</strong>.
               <br/><br/>
               <strong>Python/JS Example:</strong>
               <pre style={{ background: 'var(--bg-canvas)', padding: 10, borderRadius: 6, marginTop: 8, border: '1px solid var(--border)' }}>
@@ -115,34 +116,20 @@ function InputBuilder() {
   };
 
   const autoDetect = () => {
-    const code = state.code || '';
-    let params = [];
-    if (state.language === 'python') {
-      const match = code.match(/def\s+\w+\s*\(([^)]*)\)/);
-      if (match && match[1]) params = match[1].split(',').map(s => s.trim()).filter(Boolean);
-    } else if (state.language === 'javascript') {
-      const match = code.match(/function\s+\w+\s*\(([^)]*)\)/) || code.match(/const\s+\w+\s*=\s*(?:function)?\s*\(([^)]*)\)/);
-      if (match && match[1]) params = match[1].split(',').map(s => s.trim()).filter(Boolean);
-    } else if (state.language === 'java' || state.language === 'cpp') {
-      const lines = code.split('\n');
-      for (const line of lines) {
-        if ((line.includes('public') || line.includes('private') || line.includes('static') || line.includes('vector') || line.includes('int ')) && line.includes('(') && line.includes(')')) {
-          if (!line.includes('class ') && !line.includes('main(')) {
-            const paramStr = line.substring(line.indexOf('(') + 1, line.indexOf(')'));
-            params = paramStr.split(',').map(s => {
-              const parts = s.trim().split(/\s+/);
-              return parts[parts.length - 1]; 
-            }).filter(Boolean);
-            break;
-          }
-        }
-      }
-    }
-
-    if (params.length > 0) {
-      update({ customInputs: params.map(p => ({ key: p.replace(/[^a-zA-Z0-9_]/g, ''), val: '' })) });
+    const candidates = state.entryCandidates || [];
+    const chosen = state.entryChoice === 'auto' || state.entryChoice === 'script'
+      ? candidates[0]
+      : candidates.find((c) => entryLabel(c) === state.entryChoice);
+    if (chosen && chosen.params.length > 0) {
+      const existing = argsFromInputs(inputs);
+      update({
+        customInputs: chosen.params.map((p) => ({
+          key: p.name,
+          val: p.name in existing ? inputs.find((i) => i.key === p.name)?.val ?? '' : '',
+        })),
+      });
     } else {
-      alert("Could not automatically detect function parameters. Please ensure your code has a standard function signature.");
+      alert('No function with parameters found. Write a function (or a Solution class) first.');
     }
   };
 
@@ -185,14 +172,49 @@ function InputBuilder() {
 }
 
 // ============================================================
+// RUN AS — which function (or the whole script) gets executed
+// ============================================================
+function RunAsSelector() {
+  const { state, update } = useApp();
+  const candidates = state.entryCandidates || [];
+  if (candidates.length === 0 && !state.scriptLike) return null;
+
+  const auto = state.scriptLike && Object.keys(argsFromInputs(state.customInputs)).length === 0
+    ? 'script'
+    : candidates[0] ? entryLabel(candidates[0]) : 'script';
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+      <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>Run as</span>
+      <select
+        value={state.entryChoice}
+        onChange={(e) => update({ entryChoice: e.target.value })}
+        style={{
+          flex: 1, minWidth: 0, padding: '5px 8px', fontSize: 12, fontFamily: 'var(--font-mono)',
+          background: 'var(--bg-canvas)', color: 'var(--text-primary)',
+          border: '1px solid var(--border)', borderRadius: 6, outline: 'none',
+        }}
+      >
+        <option value="auto">Auto ({auto === 'script' ? 'script' : `${auto}()`})</option>
+        {candidates.map((c) => (
+          <option key={entryLabel(c)} value={entryLabel(c)}>
+            {entryLabel(c)}({c.params.map((p) => p.name).join(', ')}){c.isHelper ? '  · helper' : ''}
+          </option>
+        ))}
+        <option value="script">Script (run top to bottom)</option>
+      </select>
+    </div>
+  );
+}
+
+// ============================================================
 // TEST PANEL — right column top card
 // ============================================================
 function TestPanel() {
   const { state, update } = useApp();
   const mode = state.editorMode;
-  const setMode = (val) => {
-    update({ editorMode: val, testInput: '', code: '' });
-  };
+  // Switching mode must never throw away what the user typed.
+  const setMode = (val) => update({ editorMode: val });
   const [leetcodeUrl, setLeetcodeUrl] = useState('');
   const [isLoadingLC, setIsLoadingLC] = useState(false);
   const [showRules, setShowRules] = useState(false);
@@ -202,46 +224,23 @@ function TestPanel() {
     setIsLoadingLC(true);
     update({ globalLoading: true, globalLoadingText: 'Fetching from LeetCode...' });
     try {
-      const res = await fetch('http://localhost:3000/api/leetcode/fetch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: leetcodeUrl, apiKey: state.customApiKey })
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      
-      // Update testcase and editor code template
-      let newCode = state.code;
-      const currentCodeTrimmed = (state.code || '').trim();
-      const isPlaceholder = !currentCodeTrimmed || Object.values(PLACEHOLDER_CODE).some(p => p.trim() === currentCodeTrimmed);
+      // Parsing is done locally on the server (no AI, no tokens).
+      const data = await apiJson('/leetcode/fetch', { body: { url: leetcodeUrl } });
 
-      if (data.snippets) {
-        const snip = data.snippets.find(s => s.langSlug === state.language);
-        if (snip) newCode = snip.code;
-      }
-
-      // Convert first testcase into customInputs format
-      let newCustomInputs = state.customInputs;
-      if (data.testcases && data.testcases.length > 0) {
-        const firstTestCase = data.testcases[0];
-        if (typeof firstTestCase === 'object' && firstTestCase !== null) {
-          newCustomInputs = Object.keys(firstTestCase).map(k => ({
-            key: k,
-            val: typeof firstTestCase[k] === 'object' ? JSON.stringify(firstTestCase[k]) : String(firstTestCase[k])
-          }));
-        }
-      }
-      
-      update({ 
-        testInput: JSON.stringify(data.testcases, null, 2),
-        customInputs: newCustomInputs,
-        code: newCode,
+      const snippet = (data.snippets || []).find((s) => s.langSlug === LEETCODE_LANG[state.language]);
+      const first = data.testcases?.[0];
+      update({
+        testInput: JSON.stringify(data.testcases || [], null, 2),
+        customInputs: first
+          ? Object.entries(first).map(([key, value]) => ({ key, val: JSON.stringify(value) }))
+          : state.customInputs,
+        code: snippet ? snippet.code : state.code,
         leetcodeProblem: data,
-        isLeetcodeModalOpen: true
+        entryChoice: 'auto',
+        isLeetcodeModalOpen: true,
       });
-      
     } catch (err) {
-      alert("Failed to fetch LeetCode problem: " + err.message);
+      alert('Failed to fetch LeetCode problem: ' + err.message);
     } finally {
       setIsLoadingLC(false);
       update({ globalLoading: false });
@@ -310,6 +309,7 @@ function TestPanel() {
         </div>
       )}
 
+      <RunAsSelector />
       <InputBuilder />
 
       {mode === 'custom' && (
@@ -629,88 +629,95 @@ function ConsoleOutput({ result, error, onClose }) {
         whiteSpace: 'pre-wrap', flex: 1,
         overflowY: 'auto',
       }}>
-        {error ? error : result}
+        {result}{result && error ? '\n\n' : ''}{error}
       </div>
     </div>
   );
 }
 
+const formatError = (e) => (e ? `${e.type}: ${e.message}${e.line ? ` (line ${e.line})` : ''}` : null);
+
+function consoleText(built) {
+  const parts = [];
+  if (built.stdout) parts.push(built.stdout.replace(/\n$/, ''));
+  if (built.stdoutClipped) parts.push('… output was cut at 64 KB');
+  if (built.result !== null && built.result !== undefined) parts.push(`→ returned ${built.result}`);
+  const notes = [`${built.frames.length} steps`];
+  if (built.truncated) notes.push('stopped at the step limit');
+  parts.push(`(${notes.join(', ')})`);
+  return parts.join('\n');
+}
+
 export default function EditorView() {
   const { state, update, traceEngine } = useApp();
-  const {
-    initEngine, executeCode,
-    isReady, engineStatus, engineMessage, error: engineError,
-  } = traceEngine;
+  const { run, inspect, engineStatus, engineMessage, error: engineError } = traceEngine;
 
   const [runError, setRunError] = useState(null);
   const [runOutput, setRunOutput] = useState(null);
 
-  const handleExecute = useCallback(async (isVisualiseMode) => {
+  // Keep the "Run as" candidates in sync with the code (parsed locally, debounced).
+  useEffect(() => {
+    let cancelled = false;
+    const id = setTimeout(async () => {
+      let info = { entries: [], scriptLike: false };
+      try {
+        const found = await inspect(state.language, state.code || '');
+        if (found && !found.error) info = found;
+      } catch { /* runtime unavailable: fall back to no candidates */ }
+      if (cancelled) return;
+      const labels = info.entries.map(entryLabel);
+      update((prev) => ({
+        entryCandidates: info.entries,
+        scriptLike: Boolean(info.scriptLike),
+        // a stale choice (function renamed/removed) quietly goes back to automatic
+        entryChoice: prev.entryChoice === 'auto' || prev.entryChoice === 'script' || labels.includes(prev.entryChoice) ? prev.entryChoice : 'auto',
+      }));
+    }, 500);
+    return () => { cancelled = true; clearTimeout(id); };
+  }, [state.code, state.language, inspect, update]);
+
+  const handleExecute = useCallback(async (visualise) => {
     if (engineStatus === 'loading' || engineStatus === 'executing') return;
     setRunError(null);
     setRunOutput(null);
-
-    update({ isRunning: true, globalLoading: isVisualiseMode, globalLoadingText: 'Instrumenting & executing code…' });
+    update({ isRunning: true, globalLoading: visualise, globalLoadingText: 'Running your code…' });
 
     try {
-      // Step 1: init Pyodide if needed (only for python)
-      if (state.language === 'python' && !isReady) {
-        await initEngine();
-      }
-
-      // Step 2: get code + testcase (fall back to placeholder)
+      const built = await run(state);
       const code = state.code || (state.editorMode === 'leetcode' ? PLACEHOLDER_CODE[state.language] : '');
-      let testInput = state.testInput || PLACEHOLDER_TEST[state.language];
 
-      const obj = {};
-      let hasKeys = false;
-      (state.customInputs || []).forEach(i => {
-        if (!i.key) return;
-        hasKeys = true;
-        try { obj[i.key] = JSON.parse(i.val); }
-        catch { obj[i.key] = i.val; } // fallback to string
-      });
-      if (hasKeys) testInput = JSON.stringify([obj]);
-      else if (state.editorMode === 'custom') testInput = '[]';
-
-      // Step 3: execute
-      const result = await executeCode(state.editorMode, state.language, code, testInput, state.customApiKey, state.judge0ApiKey);
-
-      // Check for syntax errors or execution exceptions
-      const frames = result.frames || [];
-      const hasException = frames.length > 0 && frames[frames.length - 1].isBugFrame && frames[frames.length - 1].severity === 'error';
-      const actualError = result.error || (hasException ? frames[frames.length - 1].description : null);
-
-      if (actualError || frames.length === 0) {
-        setRunError(actualError || 'Execution produced no trace. Possible syntax error.');
+      // Nothing to show (syntax error, bad arguments...): stay here and explain.
+      if (built.frames.length === 0) {
+        setRunError(formatError(built.error) || 'Nothing was executed.');
         update({ isRunning: false, view: 'editor', globalLoading: false });
         return;
       }
 
-      // If it's a successful run and we just clicked "Run"
-      if (!isVisualiseMode) {
-        const lastFrame = frames[frames.length - 1];
-        setRunOutput(`Execution finished in ${frames.length} steps.\nReturn Value: ${lastFrame.returnValue !== undefined ? JSON.stringify(lastFrame.returnValue) : 'None'}`);
+      if (!visualise) {
+        setRunOutput(consoleText(built));
+        if (built.error) setRunError(formatError(built.error));
         update({ isRunning: false, globalLoading: false });
         return;
       }
 
-      // Step 4: populate context + navigate to visualizer
+      // A crashing run is exactly what you want to look at: it goes to the visualiser too.
       update({
-        isRunning:      false,
-        globalLoading:  false,
-        view:           'visualizer',
-        executionTrace: frames,
-        currentFrame:   0,
-        detectedBugs:   result.bugs || [],
+        isRunning: false,
+        globalLoading: false,
+        view: 'visualizer',
+        executionTrace: built.frames,
+        currentFrame: 0,
+        detectedBugs: built.bugs,
         lastExecutedCode: code,
-        executionResult: result.result,
+        executionResult: built.result,
+        traceStdout: built.stdout,
+        traceMeta: built.meta,
       });
     } catch (err) {
       setRunError(err.message || 'Execution failed.');
       update({ isRunning: false, globalLoading: false });
     }
-  }, [engineStatus, isReady, initEngine, executeCode, state, update]);
+  }, [engineStatus, run, state, update]);
   // Resizing Logic
   const [leftWidth, setLeftWidth] = React.useState(65);
 

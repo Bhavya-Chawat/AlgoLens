@@ -1,115 +1,113 @@
-export function summarizeTrace(trace, code, testInput, bugs, leetcodeProblem) {
+/**
+ * The prompt for an AI hint, built from the REAL trace. Every token comes out of the user's own free Groq quota, so
+ * the prompt is a small case file - the code, the outcome and hard evidence (the variables at the frame where
+ * something went wrong) - not the trace. Sections with nothing to say are left out, everything is capped, and
+ * the rules live once, in the system prompt.
+ */
+
+export const LIMITS = { code: 6000, problem: 600, input: 300, result: 200, evidence: 260, variables: 6, findings: 3, notes: 2 };
+
+export const HINT_SYSTEM_PROMPT = `You are AlgoLens AI, a mentor for competitive programming. You get a summary of a REAL execution of the user's code and reply with a short Socratic hint.
+Rules:
+1. First line, exactly: [ALGO: <algorithm paradigm, e.g. BFS, Sliding Window, Dynamic Programming, Two Pointers>].
+2. If the code is correct, say "Looks good! The code is correct and should pass on LeetCode." Never invent bugs. If it is correct but slow, mention one optimisation.
+3. If it fails or gives a wrong answer, give a SUBTLE hint about what goes wrong, citing variable names and "frame N" from the data. Never give the fix or corrected code.
+4. Do not flag naming style, uninitialised strings or non-linear loop bounds unless they break the algorithm.
+5. Plain text, no markdown, no bullets, at most 2 short paragraphs (about 4 sentences), encouraging tone.`;
+
+/** A rough token count (about 4 characters each): enough to show the user what a hint costs. */
+export const estimateTokens = (text) => Math.ceil(String(text ?? '').length / 4);
+
+const ENTITIES = { '&nbsp;': ' ', '&lt;': '<', '&gt;': '>', '&amp;': '&', '&quot;': '"', '&#39;': "'" };
+
+export const clip = (text, max) => {
+  const s = String(text ?? '');
+  return s.length <= max ? s : `${s.slice(0, max - 1)}…`;
+};
+
+/** LeetCode descriptions are HTML: the model needs the words, not the tags. */
+const plainText = (html) => String(html ?? '')
+  .replace(/<[^>]*>/g, ' ')
+  .replace(/&(?:nbsp|lt|gt|amp|quot|#39);/g, (e) => ENTITIES[e])
+  .replace(/\s+/g, ' ')
+  .replace(/\s+([,.;:!?)])/g, '$1')
+  .trim();
+
+const short = (value, max = 50) => clip(value !== null && typeof value === 'object' ? JSON.stringify(value) : String(value), max);
+
+/** "i=3, total=9, seen={...}" - the variables at one frame. */
+function evidenceAt(trace, frameId) {
+  const frame = trace[frameId];
+  if (!frame?.variables) return '';
+  const pairs = Object.entries(frame.variables).slice(0, 8).map(([name, info]) => `${name}=${short(info.value, 24)}`);
+  return clip(pairs.join(', '), LIMITS.evidence);
+}
+
+/**
+ * `extra` = { language, result }: the language of the run and what it really returned.
+ * Returns plain data; buildPrompt() turns it into text.
+ */
+export function summarizeTrace(trace, code, testInput, bugs, leetcodeProblem, extra = {}) {
+  const frames = trace || [];
   const summary = {
-    language: 'Python/Java/CPP/JS',
-    totalFrames: trace.length,
-    testInput: testInput || 'None provided',
-    actualOutput: null,
-    expectedOutput: 'Unknown',
+    language: extra.language || 'unknown',
+    totalFrames: frames.length,
+    testInput: clip(testInput || '', LIMITS.input),
+    result: extra.result === null || extra.result === undefined ? null : clip(extra.result, LIMITS.result),
     callStackMaxDepth: 0,
     variableChanges: [],
-    suspiciousPatterns: [],
-    bugs: [],
-    userCode: code || 'Not provided',
-    problemContext: leetcodeProblem ? `Title: ${leetcodeProblem.title}\nDescription: ${leetcodeProblem.description}` : 'Not provided'
+    findings: [],
+    notes: [],
+    userCode: clip(code || 'Not provided', LIMITS.code),
+    problem: leetcodeProblem ? clip(`${leetcodeProblem.title}: ${plainText(leetcodeProblem.description)}`, LIMITS.problem) : '',
   };
+  if (frames.length === 0) return summary;
 
-  if (!trace || trace.length === 0) return summary;
-
-  // 1. Extract Actual Output (if returned from main or printed)
-  const finalFrame = trace[trace.length - 1];
-  if (finalFrame.eventType === 'return') {
-    summary.actualOutput = String(finalFrame.variables?.[finalFrame.returnValue]?.value ?? finalFrame.returnValue ?? 'None');
+  for (const b of (bugs || []).slice(0, LIMITS.findings)) {
+    const line = frames[b.frameId]?.line;
+    const vars = evidenceAt(frames, b.frameId);
+    summary.findings.push(`- ${String(b.type).replace(/_/g, ' ')}: ${b.description} (frame ${b.frameId}${line ? `, line ${line}` : ''})${vars ? ` -> ${vars}` : ''}`);
   }
 
-  // 2. Format Bugs
-  summary.bugs = bugs.map(b => `${b.type.replace(/_/g, ' ')}: ${b.description} at frame ${b.frameId}`);
-
-  // 3. Max Recursion Depth
   let maxDepth = 0;
-  trace.forEach(f => {
-    if (f.callStack && f.callStack.length > maxDepth) {
-      maxDepth = f.callStack.length;
+  const activity = {};
+  const loops = {};
+  for (const f of frames) {
+    if (f.callStack && f.callStack.length > maxDepth) maxDepth = f.callStack.length;
+    if (f.eventType === 'loop_start') loops[f.line] = (loops[f.line] || 0) + 1;
+    for (const [name, info] of Object.entries(f.variables || {})) {
+      const a = activity[name] || (activity[name] = { changes: 0, final: info.value });
+      if (info.changedThisFrame) a.changes += 1;
+      a.final = info.value;
     }
-  });
+  }
   summary.callStackMaxDepth = maxDepth;
 
-  // 4. Summarize Variable Changes
-  const varActivity = {};
-  trace.forEach(f => {
-    if (!f.variables) return;
-    Object.entries(f.variables).forEach(([name, info]) => {
-      if (!varActivity[name]) {
-        varActivity[name] = { changes: 0, finalValue: info.value, type: info.type };
-      }
-      if (info.changedThisFrame) {
-        varActivity[name].changes += 1;
-      }
-      varActivity[name].finalValue = info.value;
-    });
-  });
-
-  summary.variableChanges = Object.entries(varActivity)
+  summary.variableChanges = Object.entries(activity)
     .sort((a, b) => b[1].changes - a[1].changes)
-    .slice(0, 10)
-    .map(([name, data]) => {
-      let valStr = String(data.finalValue);
-      if (valStr.length > 50) valStr = valStr.slice(0, 47) + '...';
-      return `${name} (type ${data.type}): changed ${data.changes} times, final value: ${valStr}`;
-    });
+    .slice(0, LIMITS.variables)
+    .map(([name, a]) => `${name}: ${a.changes}x, ends as ${short(a.final)}`);
 
-  // 5. Loop Iterations (Suspicious Patterns)
-  const loopCounts = {};
-  trace.forEach((f, i) => {
-    if (f.eventType === 'loop_start') {
-      const line = f.line;
-      loopCounts[line] = (loopCounts[line] || 0) + 1;
-    }
-  });
-
-  Object.entries(loopCounts).forEach(([line, count]) => {
-    if (count > 500) {
-      summary.suspiciousPatterns.push(`Loop at line ${line} iterated ${count} times (possible infinite loop).`);
-    } else if (count > 50) {
-      summary.suspiciousPatterns.push(`Loop at line ${line} iterated ${count} times.`);
-    }
-  });
-
-  if (summary.suspiciousPatterns.length === 0) {
-    summary.suspiciousPatterns.push("None detected.");
-  }
+  summary.notes = Object.entries(loops)
+    .filter(([, count]) => count > 50)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, LIMITS.notes)
+    .map(([line, count]) => `Loop at line ${line} ran ${count} times${count > 500 ? ' (possible infinite loop)' : ''}.`);
 
   return summary;
 }
 
-export function buildPrompt(summary) {
-  return `Analyze this execution trace:
+export function buildPrompt(s) {
+  const run = [`input ${s.testInput || 'none'}`];
+  if (s.result !== null) run.push(`result ${s.result}`);
+  run.push(`${s.totalFrames} steps`);
+  if (s.callStackMaxDepth > 1) run.push(`max call depth ${s.callStackMaxDepth}`);
 
-LeetCode Problem Context:
-${summary.problemContext}
-
-User Code:
-${summary.userCode}
-
-Language: ${summary.language}
-Test input: ${summary.testInput}
-Actual output: ${summary.actualOutput}
-Total execution frames: ${summary.totalFrames}
-
-Variable activity:
-${summary.variableChanges.join('\n')}
-
-Detected issues:
-${summary.bugs.length > 0 ? summary.bugs.join('\n') : 'None'}
-
-Suspicious patterns:
-${summary.suspiciousPatterns.join('\n')}
-
-Maximum recursion depth: ${summary.callStackMaxDepth}
-
-Provide a short, concise analysis (max 3-4 sentences). 
-CRITICAL RULES FOR ACCURACY:
-1. Code Correctness: If the code logic is correct and will pass on LeetCode, state clearly: "Looks good! The code is correct and should pass on LeetCode." Do not invent bugs or hallucinate issues.
-2. Efficiency: If the code is correct but inefficient in time or space complexity, briefly comment on how to optimize it (e.g., using a HashSet instead of an Array).
-3. Wrong Answers (Subtle Hints): If the code runs but gives a wrong answer or fails edge cases, provide a *subtle hint* stating what might be going wrong. Do NOT provide the exact fix or corrected code immediately. Guide the user to find the bug themselves.
-4. No Premature Warnings: Do not flag non-standard variable names, uninitialized strings, or non-linear loop bounds as errors unless they specifically break the algorithm. Keep the hints brief, concise, and highly actionable.`;
+  const parts = [`Language: ${s.language}`];
+  if (s.problem) parts.push(`Problem: ${s.problem}`);
+  parts.push(`Code:\n${s.userCode}`, `Run: ${run.join(', ')}`);
+  if (s.findings.length) parts.push(`Findings:\n${s.findings.join('\n')}`);
+  if (s.variableChanges.length) parts.push(`Variables (times changed, final value):\n${s.variableChanges.join('\n')}`);
+  if (s.notes.length) parts.push(`Notes: ${s.notes.join(' ')}`);
+  return parts.join('\n\n');
 }

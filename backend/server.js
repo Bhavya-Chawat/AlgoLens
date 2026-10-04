@@ -1,34 +1,40 @@
 const express = require('express');
-const cors = require('cors');
-const dotenv = require('dotenv');
-
-dotenv.config();
-
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.use(cors());
-app.use(express.json());
-
 const rateLimit = require('express-rate-limit');
+const config = require('./config');
+const { createSecurity } = require('./middleware/security');
 
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again after 15 minutes'
-});
+function createApp() {
+  const app = express();
+  app.disable('x-powered-by');
 
-app.use('/api', limiter);
+  app.use('/api', createSecurity(config));
+  app.use(express.json({ limit: config.limits.jsonBody }));
 
-// Routes
-app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok' });
-});
+  // Generous: this is one person on their own machine. AI routes are tighter (free-tier quotas).
+  app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, limit: 1000, standardHeaders: 'draft-7', legacyHeaders: false }));
+  const aiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 120, standardHeaders: 'draft-7', legacyHeaders: false });
 
-app.use('/api/execute', require('./routes/execute'));
-app.use('/api/leetcode', require('./routes/leetcode'));
-app.use('/api/hint', require('./routes/hint'));
+  app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
+  app.use('/api/ai', aiLimiter, require('./routes/ai'));
+  app.use('/api/hint', aiLimiter, require('./routes/hint'));
+  app.use('/api/leetcode', require('./routes/leetcode'));
+  app.use('/api', require('./routes/run')); // /inspect, /run, /runner/status, /runner/prepare
 
-app.listen(PORT, () => {
-    console.log(`AlgoLens Backend running on http://localhost:${PORT}`);
-});
+  // Malformed JSON and other unexpected errors never leak internals.
+  // eslint-disable-next-line no-unused-vars
+  app.use((err, _req, res, _next) => {
+    if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'Invalid JSON body.' });
+    if (err.status === 413) return res.status(413).json({ error: 'Request body is too large.' });
+    res.status(500).json({ error: 'Internal server error.' });
+  });
+
+  return app;
+}
+
+if (require.main === module) {
+  createApp().listen(config.port, config.host, () => {
+    console.log(`AlgoLens API listening on http://${config.host}:${config.port} (loopback only)`);
+  });
+}
+
+module.exports = { createApp };

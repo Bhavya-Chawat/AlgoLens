@@ -1,0 +1,3 @@
+# Built by runner/java/build.mjs for local development and tests (the Docker image builds its own)
+runner/java/build/
+runner/java/dist/

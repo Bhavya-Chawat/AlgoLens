@@ -1,4 +1,5 @@
-import React from 'react';
+import { useMemo } from 'react';
+import DOMPurify from 'dompurify';
 import { X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -8,6 +9,12 @@ export default function LeetCodeModal() {
   // We can store leetcode data in state or pass as props. 
   // For now we'll assume it's in state if a leetcode problem was fetched.
   const { leetcodeProblem, isLeetcodeModalOpen } = state;
+
+  // The statement is third-party HTML: sanitise it before it ever reaches the DOM.
+  const safeHtml = useMemo(
+    () => DOMPurify.sanitize(leetcodeProblem?.content || '', { USE_PROFILES: { html: true } }),
+    [leetcodeProblem?.content],
+  );
 
   if (!isLeetcodeModalOpen || !leetcodeProblem) return null;
 
@@ -90,7 +97,7 @@ export default function LeetCodeModal() {
             lineHeight: '1.6',
             fontSize: '14px',
           }}
-          dangerouslySetInnerHTML={{ __html: leetcodeProblem.content }}
+          dangerouslySetInnerHTML={{ __html: safeHtml }}
         />
       </div>
     </div>
