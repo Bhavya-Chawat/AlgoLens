@@ -101,7 +101,13 @@
   overflow: hidden;
   min-width: 0;
   animation: vz-in 260ms var(--vz-ease);
+  display: flex;
+  flex-direction: column;
 }
+/* a panel (a <section>, not the plain notices) can be dragged bigger or smaller from its bottom-right corner; its body scrolls inside */
+section.vz-card { resize: both; }
+.vz-card[data-sized] { min-width: 220px; min-height: 96px; }
+.vz-card.vz-collapsed { resize: none; height: auto !important; }
 .vz-card-head {
   display: flex;
   align-items: center;
@@ -122,7 +128,7 @@
   display: grid; place-items: center; color: var(--vz-ink-3);
 }
 .vz-card-btn:hover { background: var(--vz-surface-3); color: var(--vz-ink); }
-.vz-card-body { padding: 14px 16px 16px; overflow: auto; }
+.vz-card-body { padding: 14px 16px 16px; overflow: auto; flex: 1 1 auto; min-height: 0; }
 .vz-card.vz-collapsed .vz-card-body { display: none; }
 .vz-badge {
   font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 999px;
@@ -197,6 +203,78 @@
 .vz-table tr.added td { background: var(--vz-done-bg); }
 .vz-table tr.updated td { background: var(--vz-write-bg); }
 .vz-table tr.hit td { background: var(--vz-read-bg); }
+
+/* ── marks from "Explain this run" (tone = accent | success | danger | warn) ─────────────── */
+.vz-cell.st-accent { border-color: var(--vz-point); background: var(--vz-point-bg); }
+.vz-cell.st-success { border-color: var(--vz-done); background: var(--vz-done-bg); }
+.vz-cell.st-danger { border-color: var(--vz-error); background: var(--vz-error-bg); }
+.vz-cell.st-warn { border-color: var(--vz-write); background: var(--vz-write-bg); }
+.vz-cell.st-danger { text-decoration: line-through; text-decoration-thickness: 1.5px; }
+.vz-tag {
+  font-family: var(--vz-mono); font-size: 10px; font-weight: 700; line-height: 1.1; white-space: nowrap;
+  color: var(--vz-point);
+}
+.vz-tag[data-tone="success"] { color: var(--vz-done); }
+.vz-tag[data-tone="danger"] { color: var(--vz-error); }
+.vz-tag[data-tone="warn"] { color: var(--vz-write); }
+.vz-win { align-self: stretch; height: 4px; margin: 0 -2px; background: var(--vz-point); opacity: 0.85; }
+.vz-win[data-tone="success"] { background: var(--vz-done); }
+.vz-win[data-tone="danger"] { background: var(--vz-error); }
+.vz-win[data-tone="warn"] { background: var(--vz-write); }
+.vz-win[data-edge="start"], .vz-win[data-edge="only"] { border-radius: 3px 0 0 3px; margin-left: 0; }
+.vz-win[data-edge="end"], .vz-win[data-edge="only"] { border-radius: 0 3px 3px 0; margin-right: 0; }
+.vz-win[data-edge="only"] { border-radius: 3px; }
+
+/* ── the "Explain this run" strip ────────────────────────── */
+.vz-story { flex-shrink: 0; border-bottom: 1px solid var(--vz-line); background: color-mix(in srgb, var(--vz-surface) 92%, transparent); font-family: var(--vz-sans); }
+.vz-story-bar { display: flex; align-items: center; gap: 10px; padding: 6px 18px; flex-wrap: wrap; }
+.vz-story-btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 13px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--vz-point); background: var(--vz-point-bg); color: var(--vz-point); font-size: 12px; font-weight: 700;
+}
+.vz-story-btn:disabled { opacity: 0.6; cursor: default; }
+.vz-story-hint { font-size: 11.5px; color: var(--vz-ink-3); }
+.vz-story-hint[data-error="1"] { color: var(--vz-error); }
+.vz-story-card { padding: 10px 18px 12px; display: flex; flex-direction: column; gap: 8px; }
+.vz-story-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--vz-ink); flex-wrap: wrap; }
+.vz-story-head svg:first-child { color: var(--vz-point); flex-shrink: 0; }
+.vz-story-idea { color: var(--vz-ink-2); font-size: 12.5px; }
+.vz-story-steps { display: flex; flex-wrap: wrap; gap: 6px; }
+.vz-story-step {
+  all: unset; cursor: pointer; padding: 3px 11px; border-radius: 999px; background: var(--vz-surface-3); color: var(--vz-ink-2);
+  font-size: 11.5px; display: inline-flex; gap: 7px; align-items: center;
+}
+.vz-story-step:hover { background: var(--vz-point-bg); color: var(--vz-point); }
+.vz-story-step .n { font-family: var(--vz-mono); font-weight: 700; color: var(--vz-point); }
+.vz-story-charts { display: flex; flex-wrap: wrap; gap: 6px 22px; }
+.vz-trend-label { display: flex; align-items: baseline; gap: 8px; font-family: var(--vz-mono); font-size: 11px; margin-bottom: 2px; }
+.vz-trend-name { font-weight: 700; color: var(--vz-ink-2); }
+.vz-trend-now { font-weight: 700; color: var(--vz-point); }
+.vz-trend-range { color: var(--vz-ink-3); }
+.vz-story-approaches { font-size: 11.5px; color: var(--vz-ink-2); }
+
+/* ── graph panel: what this step did ────────────────────────────────────────────────────── */
+.vz-gchips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.vz-gchips .vz-badge { font-size: 11px; padding: 2px 9px; }
+/* a ring that grows and fades around a node the step just changed; `forwards` keeps it invisible afterwards */
+.vz-pulse { transform-box: fill-box; transform-origin: center; animation: vz-ring 900ms ease-out forwards; }
+@keyframes vz-ring { 0% { transform: scale(0.9); opacity: 0.95; } 100% { transform: scale(1.6); opacity: 0; } }
+.vz-node:focus { outline: none; } /* focusing a node does what hovering does: its edges come forward and the rest dims */
+@media (prefers-reduced-motion: reduce) { .vz-pulse { animation: none; opacity: 0; } }
+
+/* ── panel tray: every panel is a chip you can open or close ─────────────────────────────── */
+.vz-tray { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.vz-chip {
+  all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 3px 11px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; font-family: var(--vz-mono); border: 1px solid var(--vz-line-2); color: var(--vz-ink-3);
+}
+.vz-chip i { width: 7px; height: 7px; border-radius: 50%; background: var(--vz-line-2); }
+.vz-chip[data-open="1"] { background: var(--vz-surface); color: var(--vz-ink); }
+.vz-chip[data-open="1"] i { background: var(--vz-done); }
+.vz-chip:hover { border-color: var(--vz-point); color: var(--vz-point); }
+.vz-chip:focus-visible, .vz-card-btn:focus-visible, .vz-story-btn:focus-visible { outline: 2px solid var(--vz-point); outline-offset: 2px; }
+.vz-tray-link { all: unset; cursor: pointer; font-size: 11px; color: var(--vz-ink-3); text-decoration: underline; padding: 0 4px; }
+.vz-tray-link:hover { color: var(--vz-point); }
 
 /* ── canvas chrome ───────────────────────────────────────── */
 .vz-canvas { flex: 1; width: 100%; height: 100%; min-height: 0; display: flex; flex-direction: column; position: relative; overflow: hidden; }

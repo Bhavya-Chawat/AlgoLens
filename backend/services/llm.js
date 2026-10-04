@@ -95,7 +95,7 @@ async function groqFetch(path, key, init = {}) {
 
 /** Lists chat models for this key (cached) and picks the one to use. */
 async function discover(key, { force = false } = {}) {
-  if (!key) throw new LLMError('no_key', 'No Groq API key set. Add one in Settings to use AI hints.', 400);
+  if (!key) throw new LLMError('no_key', 'No Groq API key set. Press "AI key" in the top bar and paste your free Groq key.', 400);
   const id = keyId(key);
   const hit = modelCache.get(id);
   if (!force && hit && Date.now() - hit.at < MODEL_CACHE_MS) return hit;

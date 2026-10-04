@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Card, Legend } from './Card.jsx';
 import { fmt, useViz } from './kit.js';
 import { layoutTree } from './layout.js';
@@ -13,8 +13,11 @@ const NH = 40;
 const GX = 132;
 const GY = 74;
 
+const SHOW_ALL = 120; // up to this many calls the whole tree is drawn; beyond it, only the path to the active call
+const STILL = 70; // with more nodes than this the move animation is switched off (dozens of simultaneous transitions lag)
+
 function visibleSet(calls, upto, active) {
-  if (upto <= 260) return null; // everything
+  if (upto <= SHOW_ALL) return null; // everything
   const keep = new Set();
   let c = active;
   while (c !== null && c !== undefined) {
@@ -30,10 +33,14 @@ function visibleSet(calls, upto, active) {
 export default function CallTreeLens({ panel, first }) {
   const { language } = useViz();
   const { calls, upto, idx, active, recursive, repeated, total } = panel.data;
-  const keep = visibleSet(calls, upto, active);
-  const show = (id) => id < upto && (!keep || keep.has(id));
-  const roots = calls.filter((c) => c.parent === null && show(c.id)).map((c) => c.id);
-  const { pos, width, height } = layoutTree(roots, (id) => calls[id].children.filter(show).map((k) => ({ id: k })));
+  // the layout only changes when a call starts or the active call moves, not at every line of every call
+  const { keep, pos, width, height } = useMemo(() => {
+    const kept = visibleSet(calls, upto, active);
+    const show = (id) => id < upto && (!kept || kept.has(id));
+    const roots = calls.filter((c) => c.parent === null && show(c.id)).map((c) => c.id);
+    return { keep: kept, ...layoutTree(roots, (id) => calls[id].children.filter(show).map((k) => ({ id: k }))) };
+  }, [calls, upto, active]);
+  const still = pos.size > STILL;
   const W = Math.max(300, (width - 1) * GX + NW + 40);
   const H = (height - 1) * GY + NH + 40;
   const px = (id) => 20 + (pos.get(id)?.x ?? 0) * GX + NW / 2;
@@ -43,8 +50,6 @@ export default function CallTreeLens({ panel, first }) {
     const el = holder.current?.querySelector('[data-active="1"]');
     if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
   }, [active, upto]);
-  const dupCount = new Map();
-  calls.forEach((c, i) => { if (i < upto && c.dup) dupCount.set(c.dupOf, (dupCount.get(c.dupOf) || 0) + 1); });
   const hidden = keep ? upto - keep.size : 0;
   const badges = [{ text: `${upto}/${total} calls` }];
   if (repeated) badges.push({ text: `${repeated} repeated`, tone: 'write' });
@@ -65,7 +70,7 @@ export default function CallTreeLens({ panel, first }) {
             const text = `${c.fn}(${c.args})`;
             const clipped = text.length > 17 ? `${text.slice(0, 16)}…` : text;
             return (
-              <g key={id} className="vz-node" data-active={isActive ? '1' : undefined} style={{ transform: `translate(${px(id) - NW / 2}px, ${py(id) - NH / 2}px)` }}>
+              <g key={id} className="vz-node" data-active={isActive ? '1' : undefined} style={{ transform: `translate(${px(id) - NW / 2}px, ${py(id) - NH / 2}px)`, transition: still ? 'none' : undefined }}>
                 <title>{`${text}${done && c.hasRet ? ` → ${JSON.stringify(c.ret)}` : ''}${c.dup ? ' (repeated work)' : ''}`}</title>
                 <rect width={NW} height={NH} rx={10} fill={fill} stroke={stroke} strokeWidth={isActive ? 2.8 : 1.8} strokeDasharray={c.dup ? '5 3' : undefined} />
                 <text x={NW / 2} y={done && c.hasRet ? 16 : 24} textAnchor="middle" fontSize="11" fontWeight="700" fill="var(--vz-ink)">{clipped}</text>

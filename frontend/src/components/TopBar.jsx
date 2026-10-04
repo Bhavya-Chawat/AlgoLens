@@ -3,6 +3,7 @@ import { Search, ChevronDown, Play, Sun, Moon, Eye } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import ApiKeySettings from './ApiKeySettings';
 import ExamplesMenu from './ExamplesMenu';
+import AccountMenu from './AccountMenu';
 import { LANGUAGE_LABELS, LEETCODE_LANG } from '../constants/placeholders';
 
 // ============================================================
@@ -308,6 +309,7 @@ export default function TopBar({ onRun, onVisualise }) {
         <LanguageSelector />
         <div style={{ width: 1, height: 18, background: 'var(--border)' }} />
         {!isVisualizer && <ActionButtons onRun={onRun} onVisualise={onVisualise} />}
+        <AccountMenu />
         <ThemeToggle />
       </div>
     </header>

@@ -1,6 +1,6 @@
 import { Fragment } from 'react';
 import { Card, Legend } from './Card.jsx';
-import { LEGEND, fmt, fmtCell, infinityIn, isInfinity, useViz } from './kit.js';
+import { LEGEND, fmt, fmtCell, infinityIn, isInfinity, storyLegend, useViz } from './kit.js';
 
 /**
  * Two-dimensional data: mazes, boards (N-Queens, Sudoku), matrices and DP tables. For a DP table the cells the
@@ -37,6 +37,10 @@ export default function GridLens({ panel, first }) {
   const chg = new Set(changed.map(([r, c]) => key(r, c)));
   const seen = new Set(overlay.visited.map(([r, c]) => key(r, c)));
   const front = new Set(overlay.frontier.map(([r, c]) => key(r, c)));
+  // marks from "Explain this run": single cells and whole rows
+  const storyCells = new Map((panel.story?.grid || []).map((m) => [key(m.r, m.c), m]));
+  const storyRows = new Map((panel.story?.rows || []).map((m) => [m.r, m]));
+  const big = rows * cols > 300; // a big table skips the per-cell tooltip text: thousands of strings per step add up
   const flat = cells.flat();
   const mixed = infinityIn(flat);
   // an "infinity" (1e9, INT_MAX ...) is neither drawn as a number nor allowed to flatten the heat of every real value
@@ -54,6 +58,7 @@ export default function GridLens({ panel, first }) {
   if (cursor) legend.push({ ...LEGEND.point, label: `at (${cursor.names.join(', ')})` });
   if (seen.size) legend.push(LEGEND.done);
   if (front.size) legend.push(LEGEND.front);
+  legend.push(...storyLegend([...(panel.story?.grid || []), ...(panel.story?.rows || [])]));
 
   const badges = [{ text: `${rows} × ${cols}` }];
   if (kind === 'dp') badges.unshift({ text: 'DP table', tone: 'point' });
@@ -103,15 +108,18 @@ export default function GridLens({ panel, first }) {
                   bg = `color-mix(in srgb, var(--vz-done) ${t}%, var(--vz-surface))`;
                 }
                 if (kind === 'dp' && filler !== null && filler !== undefined && x === filler && !cls.includes('write')) cls.push('filler');
+                const sm = storyCells.get(k) || storyRows.get(r);
+                if (sm) { cls.push(`st-${sm.tone}`); bg = undefined; color = undefined; }
                 const text = kind === 'board' ? (x === 'Q' ? '♛' : '') : tone === 'on' || tone === 'wall' ? (cellKind === 'int' || cellKind === 'char' ? '' : '') : fmtCell(x, language, 4, mixed);
                 const shown = (tone === 'on' && (cellKind === 'int' || cellKind === 'binary')) ? String(x) : text;
+                const special = cls.length > (cls.includes('filler') ? 2 : 1);
                 return (
                   <div
                     key={c}
                     role="gridcell"
                     className={cls.join(' ')}
                     style={{ width: size, height: size, minWidth: 0, padding: 0, fontSize: kind === 'board' ? size * 0.62 : size > 30 ? 13 : 11, background: bg, color: color || (kind === 'board' ? 'var(--vz-ink)' : undefined) }}
-                    title={`${panel.title}[${r}][${c}] = ${fmt(x, language, 30)}`}
+                    title={!big || special ? `${panel.title}[${r}][${c}] = ${fmt(x, language, 30)}${sm?.label ? ` (${sm.label})` : ''}` : undefined}
                   >
                     {shown}
                   </div>

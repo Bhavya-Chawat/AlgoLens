@@ -29,13 +29,29 @@ export const LENS_LABELS = {
   intervals: 'Intervals', bits: 'Bits', calltree: 'Call tree', scalars: 'Variables',
 };
 
+const KEEP = 160; // recognised steps remembered per trace
+
+/**
+ * Recognising a step is pure (the model never changes), so the answer is remembered: stepping back, scrubbing the
+ * timeline and replaying all land on steps that were already worked out. The newest 160 are kept.
+ */
 export function recognize(model, idx) {
+  const memo = model.recognized || (model.recognized = new Map());
+  const hit = memo.get(idx);
+  if (hit) {
+    memo.delete(idx);
+    memo.set(idx, hit); // most recently used goes last
+    return hit;
+  }
   const ctx = makeContext(model, idx);
   for (const step of PIPELINE) step(ctx);
   const panels = [...ctx.panels].sort((a, b) => b.priority - a.priority);
-  return {
+  const out = {
     panels,
     lenses: [...new Set(panels.map((p) => p.lens))],
     accesses: ctx.accesses,
   };
+  memo.set(idx, out);
+  if (memo.size > KEEP) memo.delete(memo.keys().next().value);
+  return out;
 }

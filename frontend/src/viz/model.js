@@ -94,7 +94,9 @@ function observe(p, frameIdx, entry) {
       if (d.op !== 'same') p.arr.ops[d.op] += 1;
       if (before.length === items.length && d.op !== 'same') {
         p.arr.sameLen += 1;
-        if (items.length <= 200 && sameMultiset(before, items)) p.arr.perm += 1;
+        // "same values, new order" is how a sort looks; it only makes sense for lists of plain values, and checking a
+        // DP table that way would stringify every row at every step
+        if (items.length <= 200 && items.every(isScalar) && sameMultiset(before, items)) p.arr.perm += 1;
       }
     }
     if (items.length >= 2 && !p.arr.identity && items.length <= 400 && items.every((x, i) => x === i)) p.arr.identity = true;

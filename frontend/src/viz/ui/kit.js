@@ -85,6 +85,23 @@ export function fmtFull(value, language = 'python') {
   }
 }
 
+/** Colours of the marks "Explain this run" draws: a strong one for lines and text, a soft one for fills. */
+export const TONE_COLOR = { accent: 'var(--vz-point)', success: 'var(--vz-done)', danger: 'var(--vz-error)', warn: 'var(--vz-write)' };
+export const TONE_FILL = { accent: 'var(--vz-point-bg)', success: 'var(--vz-done-bg)', danger: 'var(--vz-error-bg)', warn: 'var(--vz-write-bg)' };
+
+/** Legend entries for the labels of a set of marks (one per distinct label + tone). */
+export function storyLegend(marks) {
+  const seen = new Set();
+  const out = [];
+  for (const m of marks) {
+    const key = `${m.label}|${m.tone}`;
+    if (!m.label || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ label: m.label, color: TONE_FILL[m.tone] || TONE_FILL.accent, border: 'solid' });
+  }
+  return out;
+}
+
 export const LEGEND = {
   write: { label: 'written', color: 'var(--vz-write-bg)', border: 'solid' },
   read: { label: 'read next', color: 'var(--vz-read-bg)', border: 'solid' },

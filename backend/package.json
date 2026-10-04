@@ -10,7 +10,7 @@
   "license": "MIT",
   "type": "commonjs",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13"
   },
   "dependencies": {
     "dotenv": "^17.4.2",

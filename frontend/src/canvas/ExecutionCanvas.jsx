@@ -3,7 +3,10 @@ import { AlertTriangle, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { buildModel } from '../viz/model.js';
 import { recognize, LENS_LABELS } from '../viz/recognize.js';
+import { applyStory } from '../viz/storyMarks.js';
+import { useStory } from '../engine/useStory.js';
 import Stage from '../viz/ui/Stage.jsx';
+import StoryBar from '../components/StoryBar.jsx';
 import { fmt } from '../viz/ui/kit.js';
 
 // ============================================================
@@ -106,7 +109,7 @@ function NowStrip({ frame, source, result, language, zoom, setZoom, onResetView 
 const ExecutionCanvas = React.memo(function ExecutionCanvas({
   trace, frameIndex, bugs, onJumpReq, isDiffMode, diffFrameIndex, code,
 }) {
-  const { state, update } = useApp();
+  const { state, update, beats } = useApp();
   const [zoom, setZoom] = useState(1);
 
   const executionTrace = trace || state.executionTrace;
@@ -120,7 +123,17 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
   const language = state.traceMeta?.language || state.language;
   const lines = useMemo(() => String(source).split('\n'), [source]);
   const model = useMemo(() => buildModel(executionTrace, { code: source, language }), [executionTrace, source, language]);
-  const result = useMemo(() => (frame ? recognize(model, currentFrame) : { panels: [], lenses: [], accesses: [] }), [model, currentFrame, frame]);
+  const recognised = useMemo(() => (frame ? recognize(model, currentFrame) : { panels: [], lenses: [], accesses: [] }), [model, currentFrame, frame]);
+
+  // "Explain this run": one AI request on demand; its marks are evaluated against the real values of every step
+  const story = useStory({
+    trace: executionTrace, model, code: source, language, problem: state.leetcodeProblem, result: state.executionResult, runId: state.lastRunId,
+  });
+  const result = useMemo(
+    () => (story.story ? applyStory(recognised, story.story, model, currentFrame) : recognised),
+    [recognised, story.story, model, currentFrame],
+  );
+  const jumpTo = useCallback((index) => (onJumpReq ? onJumpReq(index) : beats.goToFrame(index)), [onJumpReq, beats]);
 
   const handleJumpToBug = useCallback((frameId) => {
     if (onJumpReq) onJumpReq(frameId);
@@ -144,6 +157,7 @@ const ExecutionCanvas = React.memo(function ExecutionCanvas({
           onJumpToBug={handleJumpToBug}
         />
       )}
+      {!isDiffMode && <StoryBar story={story} model={model} currentFrame={currentFrame} onJump={jumpTo} slug={state.leetcodeProblem?.slug} />}
       <NowStrip frame={frame} source={lines} result={result} language={language} zoom={zoom} setZoom={setZoom} onResetView={() => setZoom(1)} />
       <div
         className="vz-scroll"

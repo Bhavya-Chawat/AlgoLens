@@ -1,7 +1,9 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Play, AlertCircle, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import { apiJson } from '../api/client';
+import { saveRun } from '../api/auth';
 import { entryLabel, argsFromInputs } from '../engine/buildJob';
 import CodeEditor from '../components/CodeEditor';
 import TopBar from '../components/TopBar';
@@ -650,6 +652,7 @@ function consoleText(built) {
 
 export default function EditorView() {
   const { state, update, traceEngine } = useApp();
+  const { user } = useAuth();
   const { run, inspect, engineStatus, engineMessage, error: engineError } = traceEngine;
 
   const [runError, setRunError] = useState(null);
@@ -693,6 +696,19 @@ export default function EditorView() {
         return;
       }
 
+      // Signed in: keep this run and its code (one small request; a failure never gets in the way of the run)
+      const saved = user
+        ? saveRun({
+          language: state.language,
+          code,
+          problemKey: state.editorMode === 'leetcode' ? state.leetcodeProblem?.slug ?? null : null,
+          title: state.editorMode === 'leetcode' ? state.leetcodeProblem?.title ?? null : null,
+          steps: built.frames.length,
+          truncated: Boolean(built.truncated),
+          errorType: built.error?.type ?? null,
+        }).catch(() => null)
+        : null;
+
       if (!visualise) {
         setRunOutput(consoleText(built));
         if (built.error) setRunError(formatError(built.error));
@@ -712,12 +728,14 @@ export default function EditorView() {
         executionResult: built.result,
         traceStdout: built.stdout,
         traceMeta: built.meta,
+        lastRunId: null,
       });
+      if (saved) saved.then((r) => { if (r) update({ lastRunId: r.runId }); });
     } catch (err) {
       setRunError(err.message || 'Execution failed.');
       update({ isRunning: false, globalLoading: false });
     }
-  }, [engineStatus, run, state, update]);
+  }, [engineStatus, run, state, update, user]);
   // Resizing Logic
   const [leftWidth, setLeftWidth] = React.useState(65);
 

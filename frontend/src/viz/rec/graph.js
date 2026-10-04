@@ -119,11 +119,17 @@ function isSymmetric(edges) {
 }
 
 /** Does the source walk `name[x]` as a list of neighbours (`for y in graph[x]`, `for (int y : adj[x])`)? */
-function walkedAsNeighbours(code, name) {
+function walkedAsNeighbours(model, name) {
+  // asked about every list of lists at every step, and the answer only depends on the source: ask the regex once
+  const key = `walked:${name}`;
+  const known = model.cache.get(key);
+  if (known !== undefined) return known;
   const n = String(name).replace(/^(?:self|this)\./, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // python `for y in g[x]`; java/c++ `for (int y : g[x])` (colon inside the parentheses, same line); js `g[x].forEach`
   const pattern = `\\bin[ \\t]+(?:self\\.|this\\.)?${n}\\s*\\[|\\([^()\\n]*:[ \\t]*(?:this\\.)?${n}\\s*\\[|\\b${n}\\s*\\[[^\\]]+\\]\\s*\\.(?:forEach|map|length|size)`;
-  return new RegExp(pattern).test(code);
+  const walked = new RegExp(pattern).test(model.code);
+  model.cache.set(key, walked);
+  return walked;
 }
 
 /** Decide which graph (if any) a variable holds. */
@@ -143,15 +149,15 @@ function readGraph(ctx, v) {
   if (items.every(Array.isArray)) {
     const grid = asGrid(val);
     const ragged = !grid;
-    const evidence = graphName >= 1 || edgesName >= 1 || walkedAsNeighbours(ctx.model.code, v.name);
+    const evidence = graphName >= 1 || edgesName >= 1 || walkedAsNeighbours(ctx.model, v.name);
     if (ragged) return evidence ? fromAdjList(items) : null;
     // rectangular: a graph only when the name says so, and the shape fits
     const edgesLike = (edgesName >= 1 || /edge/i.test(v.name)) && (grid.cols === 2 || grid.cols === 3);
     if (edgesLike) return fromEdgeList(items);
-    if (graphName >= 1 || walkedAsNeighbours(ctx.model.code, v.name)) {
+    if (graphName >= 1 || walkedAsNeighbours(ctx.model, v.name)) {
       // a square matrix named like a network is an adjacency / capacity matrix (even while the algorithm updates it)
       const strong = graphName >= 2;
-      if (grid.rows === grid.cols && gridKind(grid.cells) !== 'char' && (strong || ctx.profile(v.name).arr.ops.set === 0) && !walkedAsNeighbours(ctx.model.code, v.name)) return fromMatrix(grid);
+      if (grid.rows === grid.cols && gridKind(grid.cells) !== 'char' && (strong || ctx.profile(v.name).arr.ops.set === 0) && !walkedAsNeighbours(ctx.model, v.name)) return fromMatrix(grid);
       return fromAdjList(items);
     }
     if (nameRole(v.name, 'grid') >= 2 || nameRole(v.name, 'dp') >= 2) return null;

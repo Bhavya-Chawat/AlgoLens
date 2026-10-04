@@ -190,22 +190,34 @@ function ProblemCard() {
 // DOCK PANEL — a real column beside the stage (not an overlay): resizable, collapses to a slim rail
 // ============================================================
 function DockPanel({ side, isOpen, onToggle, label, defaultWidth, min, max, children }) {
-  const [width, setWidth] = useState(defaultWidth);
+  const widthKey = `algolens-dock-${side}`;
+  // the width you dragged it to is remembered for next time
+  const [width, setWidth] = useState(() => {
+    try {
+      const saved = Number(localStorage.getItem(widthKey));
+      return saved >= min && saved <= max ? saved : defaultWidth;
+    } catch {
+      return defaultWidth;
+    }
+  });
   const left = side === 'left';
 
   const startDrag = (e) => {
     e.preventDefault();
     const startX = e.clientX;
     const startW = width;
+    let latest = startW;
     const onMove = (ev) => {
       const delta = left ? ev.clientX - startX : startX - ev.clientX;
-      setWidth(Math.max(min, Math.min(max, startW + delta)));
+      latest = Math.max(min, Math.min(max, startW + delta));
+      setWidth(latest);
     };
     const onUp = () => {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
+      try { localStorage.setItem(widthKey, String(latest)); } catch { /* private mode: it just will not be remembered */ }
     };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
@@ -515,25 +527,26 @@ function useKeyboardShortcuts() {
 // ============================================================
 // RESPONSIVE LAYOUT HOOK
 // ============================================================
+// Folds a dock only when the window *becomes* narrow (crosses the breakpoint), never because the dock's own state
+// changed: the old version re-closed a dock the moment you opened it on a narrow window.
 function useResponsiveLayout() {
-  const { state, update } = useApp();
+  const { update } = useApp();
 
   useEffect(() => {
+    let last = window.innerWidth;
     const handleResize = () => {
-      if (window.innerWidth < 1024 && state.rightPanelOpen) {
-        update({ rightPanelOpen: false });
-      }
-      if (window.innerWidth < 768 && state.leftPanelOpen) {
-        update({ leftPanelOpen: false });
-      }
+      const width = window.innerWidth;
+      const crossed = (limit) => last >= limit && width < limit;
+      if (crossed(1024)) update({ rightPanelOpen: false });
+      if (crossed(768)) update({ leftPanelOpen: false });
+      last = width;
     };
-
-    // Initial check
-    handleResize();
-
+    // on arrival: a narrow window starts with the right dock folded
+    if (window.innerWidth < 1024) update({ rightPanelOpen: false });
+    if (window.innerWidth < 768) update({ leftPanelOpen: false });
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [state.rightPanelOpen, state.leftPanelOpen, update]);
+  }, [update]);
 }
 
 // ============================================================

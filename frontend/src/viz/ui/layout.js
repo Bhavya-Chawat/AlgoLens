@@ -118,58 +118,76 @@ function layered(nodes, edges, W, H) {
   return pos;
 }
 
+/**
+ * Force-directed layout (Fruchterman-Reingold), deterministic. The inner loop is the cost: every pair of nodes,
+ * every round. It works on typed arrays by index (no Map lookups, no per-round allocation) and a bigger graph
+ * gets fewer rounds with a faster cooling, ending at the same temperature, so a 100-node graph is laid out in
+ * a few milliseconds instead of freezing the page.
+ */
 function force(nodes, edges, W, H) {
   const n = nodes.length;
-  const pos = new Map();
   const rnd = mulberry32(n * 7919 + edges.length * 104729);
   const sorted = [...nodes].sort(natural);
+  const index = new Map(sorted.map((id, i) => [id, i]));
   const R = Math.min(W, H) / 2.6;
-  sorted.forEach((id, i) => {
+  const xs = new Float64Array(n);
+  const ys = new Float64Array(n);
+  sorted.forEach((_, i) => {
     const a = (i / n) * Math.PI * 2 - Math.PI / 2;
-    pos.set(id, { x: W / 2 + R * Math.cos(a) + (rnd() - 0.5) * 6, y: H / 2 + R * Math.sin(a) + (rnd() - 0.5) * 6 });
+    xs[i] = W / 2 + R * Math.cos(a) + (rnd() - 0.5) * 6;
+    ys[i] = H / 2 + R * Math.sin(a) + (rnd() - 0.5) * 6;
   });
-  if (n <= 2) return pos;
+  const result = () => new Map(sorted.map((id, i) => [id, { x: xs[i], y: ys[i] }]));
+  if (n <= 2) return result();
+
   const k = Math.sqrt((W * H) / n) * 0.85;
-  const links = edges.filter((e) => e.from !== e.to && pos.has(e.from) && pos.has(e.to));
+  const kk = k * k;
+  const links = [];
+  for (const e of edges) {
+    if (e.from === e.to) continue;
+    const a = index.get(e.from);
+    const b = index.get(e.to);
+    if (a !== undefined && b !== undefined) links.push(a, b);
+  }
+  const rounds = n > 80 ? 120 : n > 40 ? 200 : 300;
+  const cooling = 0.985 ** (300 / rounds);
+  const dispX = new Float64Array(n);
+  const dispY = new Float64Array(n);
   let t = W / 8;
-  for (let it = 0; it < 300; it++) {
-    const disp = new Map(sorted.map((id) => [id, { x: 0, y: 0 }]));
+  for (let it = 0; it < rounds; it++) {
+    dispX.fill(0);
+    dispY.fill(0);
     for (let i = 0; i < n; i++) {
       for (let j = i + 1; j < n; j++) {
-        const a = pos.get(sorted[i]);
-        const b = pos.get(sorted[j]);
-        let dx = a.x - b.x;
-        let dy = a.y - b.y;
-        let d = Math.hypot(dx, dy) || 0.01;
-        const f = (k * k) / d;
+        let dx = xs[i] - xs[j];
+        let dy = ys[i] - ys[j];
+        const d = Math.hypot(dx, dy) || 0.01;
+        const f = kk / d;
         dx /= d; dy /= d;
-        disp.get(sorted[i]).x += dx * f; disp.get(sorted[i]).y += dy * f;
-        disp.get(sorted[j]).x -= dx * f; disp.get(sorted[j]).y -= dy * f;
+        dispX[i] += dx * f; dispY[i] += dy * f;
+        dispX[j] -= dx * f; dispY[j] -= dy * f;
       }
     }
-    for (const e of links) {
-      const a = pos.get(e.from);
-      const b = pos.get(e.to);
-      let dx = a.x - b.x;
-      let dy = a.y - b.y;
+    for (let l = 0; l < links.length; l += 2) {
+      const a = links[l];
+      const b = links[l + 1];
+      let dx = xs[a] - xs[b];
+      let dy = ys[a] - ys[b];
       const d = Math.hypot(dx, dy) || 0.01;
       const f = (d * d) / k;
       dx /= d; dy /= d;
-      disp.get(e.from).x -= dx * f; disp.get(e.from).y -= dy * f;
-      disp.get(e.to).x += dx * f; disp.get(e.to).y += dy * f;
+      dispX[a] -= dx * f; dispY[a] -= dy * f;
+      dispX[b] += dx * f; dispY[b] += dy * f;
     }
-    for (const id of sorted) {
-      const p = pos.get(id);
-      const dd = disp.get(id);
-      const len = Math.hypot(dd.x, dd.y) || 0.01;
-      p.x += (dd.x / len) * Math.min(len, t);
-      p.y += (dd.y / len) * Math.min(len, t);
-      p.x = Math.max(30, Math.min(W - 30, p.x));
-      p.y = Math.max(30, Math.min(H - 30, p.y));
+    for (let i = 0; i < n; i++) {
+      const len = Math.hypot(dispX[i], dispY[i]) || 0.01;
+      const step = Math.min(len, t);
+      xs[i] = Math.max(30, Math.min(W - 30, xs[i] + (dispX[i] / len) * step));
+      ys[i] = Math.max(30, Math.min(H - 30, ys[i] + (dispY[i] / len) * step));
     }
-    t *= 0.985;
+    t *= cooling;
   }
-  return pos;
+  return result();
 }
 
 /** Stretch positions to fill the drawing area with a margin. */

@@ -1,8 +1,25 @@
 import { AppProvider, useApp } from './context/AppContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import EditorView from './views/EditorView';
 import VisualizerView from './views/VisualizerView';
 import ErrorBoundary from './components/ErrorBoundary';
 import LeetCodeModal from './components/LeetCodeModal';
+import AuthModal from './components/AuthModal';
+import HistoryDrawer from './components/HistoryDrawer';
+
+// ============================================================
+// SIGN-IN LAYER — the dialog, the history list, and (only when the server requires an account) a gate
+// ============================================================
+function AuthLayer() {
+  const { dialog, config, user, ready } = useAuth();
+  if (ready && config.requireLogin && !user) return <AuthModal forced />;
+  return (
+    <>
+      {dialog && <AuthModal key={dialog} initialMode={dialog} />}
+      <HistoryDrawer />
+    </>
+  );
+}
 
 // ============================================================
 // VIEW SWITCHER — crossfade transition between views
@@ -87,12 +104,15 @@ function GlobalLoadingOverlay() {
 export default function App() {
   return (
     <AppProvider>
-      <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }}>
-        <GlobalLoadingOverlay />
-        <ErrorBoundary>
-          <ViewSwitcher />
-        </ErrorBoundary>
-      </div>
+      <AuthProvider>
+        <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }}>
+          <GlobalLoadingOverlay />
+          <ErrorBoundary>
+            <ViewSwitcher />
+          </ErrorBoundary>
+          <AuthLayer />
+        </div>
+      </AuthProvider>
     </AppProvider>
   );
 }

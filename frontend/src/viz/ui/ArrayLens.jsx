@@ -29,7 +29,7 @@ function cellClass({ i, changed, reads, writes, inWindow, dim, done, filler, poi
   return c.join(' ');
 }
 
-function Cells({ data, language }) {
+function Cells({ data, language, story }) {
   const { items, pointers, bounds, changed, reads, writes, style, filler } = data;
   const byPtr = groupPointers(pointers);
   const changedSet = new Set(changed);
@@ -38,6 +38,9 @@ function Cells({ data, language }) {
   const small = items.length > 18;
   const isDp = style === 'dp';
   const mixed = infinityIn(items);
+  // marks from "Explain this run": single cells by index, and one range (a window)
+  const marks = new Map((story?.cells || []).map((m) => [m.i, m]));
+  const win = story?.range || null;
   return (
     <div className="vz-cells" role="list" aria-label={`${data.name} cells`}>
       {items.map((x, i) => {
@@ -45,22 +48,27 @@ function Cells({ data, language }) {
         const outside = bounds?.kind === 'range' && !inRange;
         const isFiller = isDp && filler !== null && filler !== undefined && JSON.stringify(x) === JSON.stringify(filler);
         const text = style === 'string' ? String(x) : fmtCell(x, language, small ? 4 : 7, mixed);
+        const mark = marks.get(i);
+        const inWin = win && i >= win.lo && i <= win.hi;
+        const tone = mark ? mark.tone : inWin ? win.tone : null;
+        const edge = !inWin ? null : win.lo === win.hi ? 'only' : i === win.lo ? 'start' : i === win.hi ? 'end' : 'mid';
+        const tag = mark?.label || (inWin && i === win.lo ? win.label : '');
+        const base = cellClass({
+          i, changed: changedSet, reads: readSet, writes: writeSet, small,
+          inWindow: bounds?.kind === 'window' && inRange, dim: outside && !tone, filler: isFiller,
+          pointerAt: byPtr.has(i) && (byPtr.get(i).length > 0) && false,
+        });
         return (
           <div key={i} className="vz-cellwrap" role="listitem">
-            <div
-              className={cellClass({
-                i, changed: changedSet, reads: readSet, writes: writeSet, small,
-                inWindow: bounds?.kind === 'window' && inRange, dim: outside, filler: isFiller,
-                pointerAt: byPtr.has(i) && (byPtr.get(i).length > 0) && false,
-              })}
-              title={`${data.name}[${i}] = ${fmtFull(x, language)}`}
-            >
+            <div className={tone ? `${base} st-${tone}` : base} title={`${data.name}[${i}] = ${fmtFull(x, language)}${mark?.label ? ` (${mark.label})` : ''}`}>
               {text}
             </div>
             <span className="vz-idx">{i}</span>
             <div className="vz-ptrs">
               {(byPtr.get(i) || []).map((n) => <span key={n} className="vz-ptr">{n}</span>)}
             </div>
+            {edge && <div className="vz-win" data-tone={win.tone} data-edge={edge} />}
+            {tag && <span className="vz-tag" data-tone={mark ? mark.tone : win.tone}>{tag}</span>}
           </div>
         );
       })}
@@ -121,10 +129,12 @@ export default function ArrayLens({ panel, first }) {
   if (data.bounds?.kind === 'range') badges.push({ text: `search ${data.bounds.names[0]}=${data.bounds.lo} … ${data.bounds.names[1]}=${data.bounds.hi}`, tone: 'point' });
   if (data.bounds?.kind === 'window') badges.push({ text: `window [${data.bounds.lo}, ${data.bounds.hi}] · ${Math.abs(data.bounds.hi - data.bounds.lo) + 1} wide`, tone: 'point' });
   if (data.swapped) badges.push({ text: `swap ${data.swapped[0]} ↔ ${data.swapped[1]}`, tone: 'write' });
+  const range = panel.story?.range;
+  if (range && !bars) badges.push({ text: `${range.label || 'range'} [${range.lo}, ${range.hi}]`, tone: 'point' });
   const kindLabel = { bars: 'sorting', dp: '1-D table', string: 'string', cells: 'array' }[data.style] || 'array';
   return (
     <Card title={panel.title} kind={`${kindLabel} · ${data.items.length}${data.more ? '+' : ''}`} badges={badges} vars={panel.vars} first={first}>
-      {bars ? <Bars data={data} language={language} /> : <Cells data={data} language={language} />}
+      {bars ? <Bars data={data} language={language} /> : <Cells data={data} language={language} story={panel.story} />}
       {legend.length > 0 && <Legend items={legend} />}
     </Card>
   );

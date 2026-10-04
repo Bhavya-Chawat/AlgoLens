@@ -1,5 +1,5 @@
 import { Card, Legend } from './Card.jsx';
-import { LEGEND, fmt, useViz } from './kit.js';
+import { LEGEND, TONE_COLOR, fmt, useViz } from './kit.js';
 import { layoutTree } from './layout.js';
 
 /** Union-Find forest, heap (array + tree), segment tree, Fenwick tree. */
@@ -27,6 +27,8 @@ export function DsuLens({ panel, first }) {
   const focusBy = new Map();
   focus.forEach((f) => { if (!focusBy.has(f.node)) focusBy.set(f.node, []); focusBy.get(f.node).push(f.name); });
   const touched = new Map(marks.map((m) => [m.node, m.kind]));
+  // marks from "Explain this run": which nodes to ring (matched by label, `labels[i]` is the node's name)
+  const storyNodes = new Map((panel.story?.nodes || []).map((m) => [String(m.id), m]));
   const comp = companion;
   return (
     <Card title={panel.title} kind="union-find" badges={[{ text: `${data.components} component${data.components === 1 ? '' : 's'}`, tone: 'done' }, ...(rewired.length ? [{ text: `rewired ${rewired.length}`, tone: 'write' }] : [])]} vars={panel.vars} wide first={first}>
@@ -69,6 +71,16 @@ export function DsuLens({ panel, first }) {
               )}
               {/* above the node: the children's arrows arrive from below */}
               {isRoot && <text x={-3} y={-NR - 6} textAnchor="middle" fontSize="9" fontWeight="700" fill="var(--vz-done)">root</text>}
+              {storyNodes.has(String(labels[i])) && (() => {
+                const sn = storyNodes.get(String(labels[i]));
+                const color = TONE_COLOR[sn.tone] || TONE_COLOR.accent;
+                return (
+                  <g>
+                    <circle r={NR + 5} fill="none" stroke={color} strokeWidth="2.2" strokeDasharray="3 3" />
+                    {sn.label && <text textAnchor="middle" y={isRoot ? -NR - 17 : -NR - 8} fontSize="9.5" fontWeight="700" fill={color}>{sn.label}</text>}
+                  </g>
+                );
+              })()}
               {f && (
                 <g transform={`translate(0, ${NR + 12})`}>
                   <rect x={-(f.join('·').length * 3.3 + 7)} y={-9} width={f.join('·').length * 6.6 + 14} height={15} rx={7} fill="var(--vz-point-bg)" stroke="var(--vz-point)" />

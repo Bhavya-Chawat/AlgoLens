@@ -46,6 +46,7 @@ const INITIAL_STATE = {
   executionResult: null,
   traceStdout: '',          // everything the program printed (frames carry outLen to slice it)
   traceMeta: null,
+  lastRunId: null,          // id of this run in the signed-in user's history (lets "Explain" label it)
   isPlaying: false,
   playbackSpeed: 1,
   detectedBugs: [],

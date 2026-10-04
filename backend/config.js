@@ -47,9 +47,30 @@ module.exports = {
       cpp: process.env.RUNNER_IMAGE_CPP || 'algolens/cpp:1',
     },
   },
+  // Accounts and saved runs live in one SQLite file (Node's built-in node:sqlite: no extra install).
+  // Under `node --test` the database is in memory so tests never touch real data.
+  db: {
+    file: process.env.ALGOLENS_DB || (process.env.NODE_TEST_CONTEXT ? ':memory:' : path.join(__dirname, 'data', 'algolens.db')),
+    maxSolutionsPerUser: 300,
+    maxRunsPerUser: 2000,
+  },
+  auth: {
+    // Off by default: the app works without an account. Set to 1 to make every API call (and the UI) require one.
+    requireLogin: process.env.ALGOLENS_REQUIRE_LOGIN === '1',
+    allowRegistration: process.env.ALGOLENS_ALLOW_REGISTRATION !== '0',
+    sessionDays: Number(process.env.ALGOLENS_SESSION_DAYS) || 30,
+    // Behind HTTPS (a hosted server) the session cookie must be Secure.
+    secureCookies: process.env.ALGOLENS_SECURE_COOKIES === '1',
+  },
+  ai: {
+    // "Explain" is one AI call per run and only when asked; signed-in users also get a daily cap.
+    dailyLimit: Number(process.env.ALGOLENS_AI_DAILY_LIMIT) || 40,
+    timeoutMs: 30_000,
+  },
   limits: {
     jsonBody: '1mb',
     codeChars: 200_000,
     hintChars: 24_000,
+    storyChars: 16_000,
   },
 };

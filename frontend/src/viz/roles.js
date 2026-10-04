@@ -123,8 +123,20 @@ export function tokens(name) {
 const norm = (name) => baseName(name).replace(/[_\-\s]/g, '').toLowerCase();
 const normNoDigits = (name) => norm(name).replace(/\d+$/g, '');
 
-/** 2 = strong name for the role, 1 = weak, 0 = no hint. */
+const roleCache = new Map();
+
+/** 2 = strong name for the role, 1 = weak, 0 = no hint. (Asked for every variable, several times, at every step: memoised.) */
 export function nameRole(name, role) {
+  const key = `${role}|${name}`;
+  const hit = roleCache.get(key);
+  if (hit !== undefined) return hit;
+  const value = computeRole(name, role);
+  if (roleCache.size > 4000) roleCache.clear();
+  roleCache.set(key, value);
+  return value;
+}
+
+function computeRole(name, role) {
   const table = ROLES[role];
   if (!table) return 0;
   const whole = norm(name);

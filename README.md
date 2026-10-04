@@ -17,7 +17,7 @@ Java and C++ run with `--network none` in a throw-away container. The first Java
 
 ## Quick start (Windows)
 
-You need [Node.js](https://nodejs.org) 20 or newer. For Java and C++ also install and start [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+You need [Node.js](https://nodejs.org) 22.13 or newer (accounts use its built-in SQLite, so nothing extra to install). For Java and C++ also install and start [Docker Desktop](https://www.docker.com/products/docker-desktop/).
 
 ```bash
 start.bat
@@ -32,9 +32,25 @@ cd backend && npm install && npm start
 cd frontend && npm install && npm run dev
 ```
 
-## AI hints (optional)
+## AI (optional, always on a button)
 
-Open Settings in the app and paste your own free [Groq key](https://console.groq.com/keys). It stays in your browser; your local server forwards it to Groq and nowhere else. Tracing never needs it. A hint sends your code plus a short summary of the run, typically a few hundred tokens, and nothing is sent until you press **Get Hint**. Asking again about the same run reuses the answer.
+Press **AI key** in the top bar and paste your own free [Groq key](https://console.groq.com/keys). It stays in your browser; your local server forwards it to Groq and nowhere else. Tracing never needs it, and nothing is sent anywhere until you press one of two buttons:
+
+- **Get Hint** sends your code plus a short summary of the run (a few hundred tokens) and returns a Socratic nudge. Asking again about the same run reuses the answer.
+- **Explain this run** (above the pictures) makes one small request and gets back an algorithm name, one sentence, and a few *marks*: "the window is `i-k+1 .. i`", "this cell leaves, this one enters", "the cell being written is `dp[i][j]`, the one it reads is `dp[i-1][j-1]`", "the current node is `node`". The AI never supplies a number that gets drawn: every mark is an expression that AlgoLens evaluates against the real values of the step you are on, and anything that does not hold up against the run is dropped. It works for arrays, DP tables, graphs and union-find. The answer is cached per run, so the same run never costs a second request, and signed-in users get a daily cap (`ALGOLENS_AI_DAILY_LIMIT`, 40 by default).
+
+## Accounts (optional)
+
+The app works without one. **Sign in** (top bar) creates an account stored in a local SQLite file (`backend/data/algolens.db`, ignored by git):
+
+- Every run you visualise while signed in is kept (its code once per distinct version, plus language, step count and the algorithm the AI named). **My history** reopens any of them.
+- Passwords are salted scrypt hashes; the session is an HttpOnly cookie and the database keeps only a hash of it. There is no email, so a lost password cannot be reset. **Delete my account and all my data** is in My history.
+- **Share the algorithm I used** is off until you turn it on. It lets AlgoLens say "others solved this problem with: Sliding window (3), Prefix sums (2)", from algorithm names and counts only, never code, and only once two or more people share. Your own earlier approaches to a problem are always shown to you.
+- Set `ALGOLENS_REQUIRE_LOGIN=1` on the server to make an account mandatory (see `backend/.env.example`). To serve many people from one place, host the backend behind HTTPS with the settings listed there. Locally, "others" means people using the same installation.
+
+## Panels
+
+Every picture is a panel you control. The first three start open; each has a chip in the tray above them, so click a chip to open or close it. A panel can be folded (the arrow), closed (the X, its chip stays), and resized by dragging its bottom-right corner; the (i) says in one sentence what you are looking at. The code and inspector docks can be closed and dragged wider or narrower too. Your arrangement is remembered per program.
 
 ## How it works
 
@@ -54,8 +70,8 @@ Open Settings in the app and paste your own free [Groq key](https://console.groq
 ## Tests and lint
 
 ```bash
-cd frontend && npm test && npm run lint     # recognition engine, tracers, lenses, hints, edge cases
-cd backend  && npm test                     # API security, inspector, LeetCode import, Groq client
+cd frontend && npm test && npm run lint     # recognition engine, tracers, lenses, story marks, panels, hints, edge cases
+cd backend  && npm test                     # API security, accounts and saved data, story validation, inspector, LeetCode import, Groq client
 cd runner/java && node --test "test/*.test.mjs"      # needs Docker + the Java image
 cd runner/cpp  && node --test "test/*.test.mjs"      # needs Docker + the C++ image
 cd runner      && node --test "test/*.test.mjs"      # the recognition engine on real Java/C++ traces
@@ -72,15 +88,18 @@ The runner suites skip themselves when Docker or the images are missing.
 ## Project layout
 
 ```
-backend/            local API: /api/run, /api/inspect, /api/runner/*, /api/hint, /api/leetcode
+backend/            local API: /api/run, /api/inspect, /api/runner/*, /api/hint, /api/ai/story, /api/auth/*, /api/me/*, /api/leetcode
   services/exec     Docker runner client, C++ driver generator, trace collector
   services/inspect  tree-sitter parse of Java/C++ entry points and parameters
+  services/db,auth,store   SQLite (built in), accounts and sessions, saved runs and the comparison query
+  services/story    the "Explain this run" prompt and the validation of the model's answer
 runner/             java/ (JDI tracer) and cpp/ (gdb tracer): Dockerfiles, sources, tests
 frontend/src/
   tracers/          Python (Pyodide), JavaScript (Babel), adapter for Java/C++
   core/             AlgoTrace -> frames, bug detectors, timeline folding
-  viz/              recognition engine (rec/) and lenses (ui/)
-  engine/           run orchestration, edge-case generator, hint prompts
+  viz/              recognition engine (rec/), lenses and the panel manager (ui/), story marks (storyMarks.js)
+  engine/           run orchestration, edge-case generator, hint prompts, explain-this-run (story.js)
+  context/          app state and who is signed in
   constants/examples  the Examples menu
 ```
 
